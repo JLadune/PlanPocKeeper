@@ -1,47 +1,60 @@
 package com.example.planpockeeper
 
 import android.os.Bundle
+import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import com.example.planpockeeper.ui.theme.PlanPocKeeperTheme
+import androidx.compose.ui.viewinterop.AndroidView
+import com.github.mikephil.charting.charts.PieChart
+import com.github.mikephil.charting.data.*
+import com.github.mikephil.charting.utils.ColorTemplate
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
         setContent {
-            PlanPocKeeperTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
-                    )
-                }
-            }
+            PieChartScreen()
         }
     }
 }
 
 @Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
+fun PieChartScreen() {
+    AndroidView(
+        factory = { context ->
+            PieChart(context).apply {
 
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    PlanPocKeeperTheme {
-        Greeting("Android")
-    }
+                val entries = listOf(
+                    PieEntry(40f, "A"),
+                    PieEntry(30f, "B"),
+                    PieEntry(20f, "C"),
+                    PieEntry(10f, "D")
+                )
+
+                val dataSet = PieDataSet(entries, "Reel")
+                dataSet.colors = ColorTemplate.COLORFUL_COLORS.toList()
+
+                val data = PieData(dataSet)
+                this.data = data
+
+                this.isDrawHoleEnabled = true
+                this.holeRadius = 80f        //% du trou
+
+                setUsePercentValues(true)
+                description.isEnabled = false
+                legend.isEnabled = false
+
+                this.layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+
+                invalidate()
+            }
+        }
+    )
 }
