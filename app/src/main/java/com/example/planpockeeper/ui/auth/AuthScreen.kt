@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.planpockeeper.data.repository.AuthRepository
+import com.example.planpockeeper.ui.home.HomeScreen
 import kotlinx.coroutines.launch
 
 @Composable
@@ -79,6 +80,11 @@ fun AuthScreen(modifier: Modifier = Modifier) {
         }
     }
 
+    if (state.connectedEmail != null) {
+        HomeScreen(modifier = modifier)
+        return
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -86,31 +92,15 @@ fun AuthScreen(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.Center
     ) {
         AuthHeader()
-
-        if (state.connectedEmail != null) {
-            ConnectedUserCard(
-                email = state.connectedEmail!!,
-                onLogout = {
-                    authRepository.logout()
-                    state = state.copy(
-                        connectedEmail = null,
-                        statusMessage = "Deconnexion effectuee."
-                    )
-                }
-            )
-            StatusMessage(state.statusMessage)
-        } else {
-            AuthForm(
-                state = state,
-                onModeChange = { mode -> state = state.copy(mode = mode, statusMessage = null) },
-                onNameChange = { value -> state = state.copy(name = value) },
-                onSurnameChange = { value -> state = state.copy(surname = value) },
-                onEmailChange = { value -> state = state.copy(email = value) },
-                onPasswordChange = { value -> state = state.copy(password = value) },
-                onSubmit = ::submitAuth
-            )
-        }
-
+        AuthForm(
+            state = state,
+            onModeChange = { mode -> state = state.copy(mode = mode, statusMessage = null) },
+            onNameChange = { value -> state = state.copy(name = value) },
+            onSurnameChange = { value -> state = state.copy(surname = value) },
+            onEmailChange = { value -> state = state.copy(email = value) },
+            onPasswordChange = { value -> state = state.copy(password = value) },
+            onSubmit = ::submitAuth
+        )
         Spacer(modifier = Modifier.height(4.dp))
     }
 }
