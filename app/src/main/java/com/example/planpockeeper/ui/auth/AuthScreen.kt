@@ -81,7 +81,16 @@ fun AuthScreen(modifier: Modifier = Modifier) {
     }
 
     if (state.connectedEmail != null) {
-        HomeScreen(modifier = modifier)
+        HomeScreen(
+            modifier = modifier,
+            onLogout = {
+                authRepository.logout()
+                state = state.copy(
+                    connectedEmail = null,
+                    statusMessage = "Deconnexion effectuee."
+                )
+            }
+        )
         return
     }
 
