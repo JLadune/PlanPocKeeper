@@ -9,30 +9,36 @@ import androidx.compose.runtime.Composable
 private val DarkColorScheme = darkColorScheme(
     primary = Vieux_Rose_Dark,
     secondary = Cyan_Pastel_Dark,
-    tertiary = Blanc_Cassé_Dark
+    tertiary = Blanc_Cassé_Dark,
+    background = Fond_Dark,
+    surface = Fond_Dark,
+    surfaceVariant = Blanc_Cassé_Dark,
+    onPrimary = Fond_Dark,
+    onSecondary = Fond_Dark,
+    onBackground = Blanc_Cassé_Dark,
+    onSurface = Blanc_Cassé_Dark,
 )
 
 private val LightColorScheme = lightColorScheme(
     primary = Vieux_Rose,
     secondary = Cyan_Pastel,
     tertiary = Blanc_Cassé,
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+    background = Fond,
+    surface = Fond,
+    surfaceVariant = Blanc_Cassé,
+    onPrimary = Fond,
+    onSecondary = Fond,
+    onBackground = Vieux_Rose,
+    onSurface = Vieux_Rose,
 )
 
 @Composable
 fun PlanPocKeeperTheme(content: @Composable () -> Unit) {
     val colorScheme = if (isSystemInDarkTheme()) DarkColorScheme else LightColorScheme
+
     MaterialTheme(
         colorScheme = colorScheme,
+        typography = Typography,
         content = content
     )
 }

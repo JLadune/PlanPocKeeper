@@ -82,6 +82,8 @@ fun AuthScreen(modifier: Modifier = Modifier) {
 
     if (state.connectedEmail != null) {
         MainScreen(
+            //Doit être changé pour un Id de l'utilisateur pour récupérer tout ses infos
+            userEmail = state.connectedEmail,
             onLogout = {
                 authRepository.logout()
                 state = state.copy(
