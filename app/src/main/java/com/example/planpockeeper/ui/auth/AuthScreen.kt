@@ -15,7 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.planpockeeper.data.repository.AuthRepository
-import com.example.planpockeeper.ui.home.HomeScreen
+import com.example.planpockeeper.ui.main.MainScreen
 import kotlinx.coroutines.launch
 
 @Composable
@@ -81,8 +81,7 @@ fun AuthScreen(modifier: Modifier = Modifier) {
     }
 
     if (state.connectedEmail != null) {
-        HomeScreen(
-            modifier = modifier,
+        MainScreen(
             onLogout = {
                 authRepository.logout()
                 state = state.copy(
