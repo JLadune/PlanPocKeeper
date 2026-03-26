@@ -47,7 +47,7 @@ data class NavItem(
 
 val navItems = listOf(
     NavItem("accueil",  "Accueil",  Icons.Outlined.Home),
-    NavItem("budget",   "Budget",   Icons.Outlined.Wallet),
+    NavItem("budget",   "Budget",   Icons.Outlined.Savings),
     NavItem("depenses", "Dépenses", Icons.Outlined.Payments),
     NavItem("analyse",  "Analyse",  Icons.Outlined.BarChart)
 )
