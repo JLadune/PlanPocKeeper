@@ -25,19 +25,13 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
-
-    NavHost(
-        navController = navController,
-        startDestination = "splash"
-    ) {
+    NavHost(navController = navController, startDestination = "splash") {
         composable("splash") {
-            SplashScreen(
-                onFinished = {
-                    navController.navigate("auth") {
-                        popUpTo("splash") { inclusive = true }
-                    }
+            SplashScreen(onFinished = {
+                navController.navigate("auth") {
+                    popUpTo("splash") { inclusive = true }
                 }
-            )
+            })
         }
         composable("auth") {
             AuthScreen()

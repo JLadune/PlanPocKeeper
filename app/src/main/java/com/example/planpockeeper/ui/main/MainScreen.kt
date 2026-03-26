@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -70,7 +71,7 @@ fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
         label = "profilePanel"
     )
 
-    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val isDark = isSystemInDarkTheme()
     val barColor = if (isDark) Blanc_Cassé_Dark else Blanc_Cassé
     val contentColor = if (isDark) Vieux_Rose_Dark else Vieux_Rose
 
@@ -86,7 +87,7 @@ fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
                                 .decoderFactory(SvgDecoder.Factory())
                                 .build(),
                             contentDescription = "Logo",
-                            modifier = Modifier.height(48.dp)
+                            modifier = Modifier.height(32.dp)
                         )
                     },
                     actions = {
@@ -94,7 +95,7 @@ fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
                             Icon(
                                 imageVector = Icons.Outlined.AccountCircle,
                                 contentDescription = "Profil",
-                                modifier = Modifier.size(48.dp),
+                                modifier = Modifier.size(32.dp),
                                 tint = contentColor
                             )
                         }
@@ -107,9 +108,7 @@ fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
                 )
             },
             bottomBar = {
-                NavigationBar(
-                    containerColor = barColor
-                ) {
+                NavigationBar(containerColor = barColor) {
                     navItems.forEach { item ->
                         NavigationBarItem(
                             icon = {
@@ -156,7 +155,6 @@ fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
             }
         }
 
-        // Dark overlay
         if (profileOpen) {
             Box(
                 modifier = Modifier
@@ -166,7 +164,6 @@ fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
             )
         }
 
-        // Sliding profile panel
         Box(
             modifier = Modifier
                 .fillMaxHeight()
@@ -180,7 +177,6 @@ fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
                 .padding(16.dp)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { profileOpen = false }) {
                         Icon(
@@ -189,11 +185,7 @@ fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
                             tint = contentColor
                         )
                     }
-                    Text(
-                        "Retour",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = contentColor
-                    )
+                    Text("Retour", style = MaterialTheme.typography.bodyMedium, color = contentColor)
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -239,11 +231,7 @@ fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        "Informations de compte",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = contentColor
-                    )
+                    Text("Informations de compte", style = MaterialTheme.typography.bodyLarge, color = contentColor)
                 }
 
                 TextButton(
@@ -253,20 +241,13 @@ fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        "Paramètres de l'application",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = contentColor
-                    )
+                    Text("Paramètres de l'application", style = MaterialTheme.typography.bodyLarge, color = contentColor)
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
 
                 Button(
-                    onClick = {
-                        profileOpen = false
-                        onLogout()
-                    },
+                    onClick = { profileOpen = false; onLogout() },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
