@@ -35,4 +35,8 @@ private val LightColorScheme = lightColorScheme(
 @Composable
 fun PlanPocKeeperTheme(content: @Composable () -> Unit) {
     val colorScheme = if (isSystemInDarkTheme()) DarkColorScheme else LightColorScheme
+    MaterialTheme(
+        colorScheme = colorScheme,
+        content = content
+    )
 }
