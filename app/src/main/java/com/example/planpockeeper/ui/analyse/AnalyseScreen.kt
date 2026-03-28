@@ -15,25 +15,43 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.github.mikephil.charting.data.*
 import androidx.compose.ui.text.style.TextAlign
 import com.example.planpockeeper.ui.chart.PieChartBox
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.ui.draw.clip
-import com.example.planpockeeper.ui.analyse.BudgetSummaryItem
-import com.example.planpockeeper.ui.analyse.BudgetSummaryTable
-import kotlin.math.abs
 
+/*fun buildPlannedEntries(
+    budgetCategories: List<BudgetCategory>,
+    totalAmount: Double
+): List<PieEntry> {
+    if (totalAmount <= 0.0) return emptyList()
+
+    val entries = budgetCategories
+        .filter { it.plannedAmount > 0 }
+        .map { cat ->
+            val pct = ((cat.plannedAmount / totalAmount) * 100).toFloat()
+            PieEntry(pct, cat.categoryName)
+        }
+
+    val usedTotal = budgetCategories.sumOf { it.plannedAmount }
+    val remaining = totalAmount - usedTotal
+
+    return if (remaining > 0.01) {
+        entries + PieEntry(((remaining / totalAmount) * 100).toFloat(), "Autre")
+    } else {
+        entries
+    }
+}
+*/
 @Composable
 fun AnalyseScreen() {
+
+    //val plannedEntries = buildPlannedEntries(budgetCategories, totalAmount)
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -56,17 +74,16 @@ fun AnalyseScreen() {
                 PieEntry(40f, "Catégorie 1"),
                 PieEntry(30f, "Catégorie 2"),
                 PieEntry(30f, "Catégorie 3")
-            )
+            ),
+            color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f)
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
         PieChartBox(
             title = "Prévu",
-            entries = listOf(
-                PieEntry(50f, "Catégorie A"),
-                PieEntry(50f, "Catégorie B")
-            )
+            //entries = plannedEntries,
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
         )
 
         Spacer(modifier = Modifier.height(16.dp))

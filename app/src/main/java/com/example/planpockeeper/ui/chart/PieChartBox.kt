@@ -8,11 +8,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.github.mikephil.charting.charts.PieChart
 import com.github.mikephil.charting.data.*
@@ -22,14 +22,15 @@ import com.github.mikephil.charting.utils.ColorTemplate
 fun PieChartBox(
     title: String,
     entries: List<PieEntry>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.25f)
 ) {
     Box(
         modifier = modifier
             .fillMaxWidth(0.95f)
             .aspectRatio(1.2f)
             .background(
-                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f),
+                color = color,
                 shape = RoundedCornerShape(25.dp)
             )
     ) {
@@ -44,7 +45,7 @@ fun PieChartBox(
         )
 
         var pieChartRef by remember { mutableStateOf<PieChart?>(null) }
-        val holeColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f).toArgb()
+        val holeColor = color.copy(alpha = 0f).toArgb()
 
         AndroidView(
             modifier = Modifier
