@@ -19,11 +19,17 @@ import androidx.compose.ui.unit.dp
 import com.github.mikephil.charting.data.*
 import androidx.compose.ui.text.style.TextAlign
 import com.example.planpockeeper.ui.chart.PieChartBox
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import com.example.planpockeeper.ui.table.BudgetSummaryItem
+import com.example.planpockeeper.ui.table.BudgetSummaryTable
 
 @Composable
 fun AnalyseScreen() {
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
@@ -56,5 +62,24 @@ fun AnalyseScreen() {
         )
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "Tableau récapitulatif",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Start,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, bottom = 12.dp)
+        )
+
+        val fakeData = listOf(
+            BudgetSummaryItem("Catégorie 1", 500.0, 620.0),
+            BudgetSummaryItem("Catégorie 2", 300.0, 210.0),
+            BudgetSummaryItem("Catégorie 3", 400.0, 390.0),
+            BudgetSummaryItem("Catégorie 4", 200.0, 80.0)
+        )
+
+        BudgetSummaryTable(categories = fakeData)
     }
 }
