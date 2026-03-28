@@ -313,7 +313,7 @@ fun BudgetScreen() {
         item {
             Text(
                 "Catégories",
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
         }

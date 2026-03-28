@@ -9,6 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,13 +29,14 @@ fun PieChartBox(
             .fillMaxWidth(0.95f)
             .aspectRatio(1.2f)
             .background(
-                color = MaterialTheme.colorScheme.tertiary,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 shape = RoundedCornerShape(25.dp)
             )
     ) {
         Text(
             text = title,
-            fontSize = 22.sp,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Start,
             modifier = Modifier
                 .fillMaxWidth()
@@ -42,7 +44,7 @@ fun PieChartBox(
         )
 
         var pieChartRef by remember { mutableStateOf<PieChart?>(null) }
-        val holeColor = MaterialTheme.colorScheme.tertiary.toArgb()
+        val holeColor = MaterialTheme.colorScheme.surfaceContainerHigh.toArgb()
 
         AndroidView(
             modifier = Modifier
@@ -61,12 +63,16 @@ fun PieChartBox(
                     isRotationEnabled = false
                     description.isEnabled = false
                     legend.isEnabled = false
-                    setHoleColor(holeColor)
                     setDrawEntryLabels(false)
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
                     renderer = SilentPieChartRenderer(this, animator, viewPortHandler)
                     pieChartRef = this
                     invalidate()
                 }
+            },
+            update = { chart ->
+                chart.setHoleColor(holeColor)
+                chart.invalidate()
             }
         )
 
@@ -74,7 +80,9 @@ fun PieChartBox(
             AndroidView(
                 modifier = Modifier.matchParentSize(),
                 factory = { context ->
-                    PieLabelOverlayView(context, chart)
+                    PieLabelOverlayView(context, chart).apply {
+                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    }
                 }
             )
         }
