@@ -1,4 +1,4 @@
-package com.example.planpockeeper.ui.table
+package com.example.planpockeeper.ui.analyse
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -21,7 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-
+import kotlin.math.abs
 @Composable
 fun BudgetSummaryTable(
     categories: List<BudgetSummaryItem>,
@@ -31,9 +31,25 @@ fun BudgetSummaryTable(
     Column(modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         // Header
         Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-            Text("Catégorie", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-            Text("Dépensé/Prévu", modifier = Modifier.width(180.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-            Text("Déficit", modifier = Modifier.width(60.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
+            Text(
+                "Catégorie",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "Dépensé/Prévu",
+                modifier = Modifier.Companion.width(180.dp),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "Déficit",
+                modifier = Modifier.width(60.dp),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.End
+            )
         }
 
         HorizontalDivider()
@@ -64,27 +80,42 @@ fun BudgetSummaryTable(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(item.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            item.name,
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     }
 
-                    Column(modifier = Modifier.width(180.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(
+                        modifier = Modifier.width(180.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Réel", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(36.dp))
+                            Text(
+                                "Réel",
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.width(36.dp)
+                            )
                             Box(
                                 modifier = Modifier
                                     .width(realBarWidth)
                                     .height(10.dp)
-                                    .clip(RoundedCornerShape(5.dp))
+                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(5.dp))
                                     .background(if (isOver) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary)
                             )
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Prévu", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(36.dp))
+                            Text(
+                                "Prévu",
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.width(36.dp)
+                            )
                             Box(
                                 modifier = Modifier
                                     .width(plannedBarWidth)
                                     .height(10.dp)
-                                    .clip(RoundedCornerShape(5.dp))
+                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(5.dp))
                                     .background(MaterialTheme.colorScheme.primary)
                             )
                         }
@@ -100,7 +131,7 @@ fun BudgetSummaryTable(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            "${if (isOver) "-" else "+"}${kotlin.math.abs(diff).toInt()}€",
+                            "${if (isOver) "-" else "+"}${abs(diff).toInt()}€",
                             style = MaterialTheme.typography.labelSmall
                         )
                     }

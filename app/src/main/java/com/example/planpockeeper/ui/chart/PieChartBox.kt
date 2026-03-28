@@ -29,7 +29,7 @@ fun PieChartBox(
             .fillMaxWidth(0.95f)
             .aspectRatio(1.2f)
             .background(
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(25.dp)
             )
     ) {
@@ -44,7 +44,7 @@ fun PieChartBox(
         )
 
         var pieChartRef by remember { mutableStateOf<PieChart?>(null) }
-        val holeColor = MaterialTheme.colorScheme.surfaceContainerHigh.toArgb()
+        val holeColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f).toArgb()
 
         AndroidView(
             modifier = Modifier
