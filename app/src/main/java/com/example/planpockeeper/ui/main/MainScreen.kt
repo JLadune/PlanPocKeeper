@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -78,8 +79,16 @@ fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
-                TopAppBar(
+                CenterAlignedTopAppBar(
                     title = {
+                        Text(
+                            text = currentLabel,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = contentColor,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    navigationIcon = {
                         val context = LocalContext.current
                         AsyncImage(
                             model = ImageRequest.Builder(context)
@@ -87,7 +96,8 @@ fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
                                 .decoderFactory(SvgDecoder.Factory())
                                 .build(),
                             contentDescription = "Logo",
-                            modifier = Modifier.height(32.dp)
+                            modifier = Modifier.height(100.dp)
+                                .offset(x = (-16).dp)
                         )
                     },
                     actions = {
