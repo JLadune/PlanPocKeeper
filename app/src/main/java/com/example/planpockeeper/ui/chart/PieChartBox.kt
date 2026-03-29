@@ -23,7 +23,8 @@ fun PieChartBox(
     title: String,
     entries: List<PieEntry>,
     modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.25f)
+    color: Color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.25f),
+    pieColors: List<Int> = ColorTemplate.COLORFUL_COLORS.toList()
 ) {
     Box(
         modifier = modifier
@@ -74,7 +75,7 @@ fun PieChartBox(
             },
             update = { chart ->
                 val dataSet = PieDataSet(entries, "").apply {
-                    colors = ColorTemplate.COLORFUL_COLORS.toMutableList()
+                    colors = pieColors.toMutableList()
                 }
                 chart.data = PieData(dataSet)
                 chart.setHoleColor(holeColor)

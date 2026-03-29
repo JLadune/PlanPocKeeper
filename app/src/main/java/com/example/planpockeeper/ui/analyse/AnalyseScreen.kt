@@ -31,24 +31,29 @@ import androidx.compose.runtime.setValue
 fun buildPlannedEntries(
     budgetCategories: List<BudgetCategory>,
     totalAmount: Double
-): List<PieEntry> {
-    if (totalAmount <= 0.0) return emptyList()
+): Pair<List<PieEntry>, List<Int>> {
+    if (totalAmount <= 0.0) return Pair(emptyList(), emptyList())
 
-    val entries = budgetCategories
-        .filter { it.plannedAmount > 0 }
-        .map { cat ->
-            val pct = ((cat.plannedAmount / totalAmount) * 100).toFloat()
-            PieEntry(pct, cat.categoryName)
-        }
+    val entries = mutableListOf<PieEntry>()
+    val colors = mutableListOf<Int>()
+
+    budgetCategories.filter { it.plannedAmount > 0 }.forEach { cat ->
+        val pct = ((cat.plannedAmount / totalAmount) * 100).toFloat()
+        entries.add(PieEntry(pct, cat.categoryName))
+        val c = runCatching {
+            android.graphics.Color.parseColor(cat.color)
+        }.getOrElse { android.graphics.Color.GRAY }
+        colors.add(c)
+    }
 
     val usedTotal = budgetCategories.sumOf { it.plannedAmount }
     val remaining = totalAmount - usedTotal
-
-    return if (remaining > 0.01) {
-        entries + PieEntry(((remaining / totalAmount) * 100).toFloat(), "Autre")
-    } else {
-        entries
+    if (remaining > 0.01) {
+        entries.add(PieEntry(((remaining / totalAmount) * 100).toFloat(), "Autre"))
+        colors.add(android.graphics.Color.LTGRAY)
     }
+
+    return Pair(entries, colors)
 }
 
 @Composable
@@ -74,7 +79,7 @@ fun AnalyseScreen() {
     }
 
     val totalAmount = activeBudget?.totalAmount ?: 0.0
-    val plannedEntries = buildPlannedEntries(budgetCategories, totalAmount)
+    val (plannedEntries, plannedColors) = buildPlannedEntries(budgetCategories, totalAmount)
 
     Column(
         modifier = Modifier
@@ -108,7 +113,8 @@ fun AnalyseScreen() {
             PieChartBox(
                 title = "Prévu",
                 entries = plannedEntries,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                pieColors = plannedColors
             )
         } else {
             Text(
