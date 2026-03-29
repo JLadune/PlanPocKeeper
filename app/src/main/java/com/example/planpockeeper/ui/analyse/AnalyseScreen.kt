@@ -1,17 +1,12 @@
 package com.example.planpockeeper.ui.analyse
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -23,8 +18,17 @@ import androidx.compose.ui.text.style.TextAlign
 import com.example.planpockeeper.ui.chart.PieChartBox
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import com.example.planpockeeper.data.model.Budget
+import com.example.planpockeeper.data.model.BudgetCategory
+import com.example.planpockeeper.data.repository.BudgetRepository
+import com.example.planpockeeper.data.repository.BudgetCategoryRepository
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
-/*fun buildPlannedEntries(
+fun buildPlannedEntries(
     budgetCategories: List<BudgetCategory>,
     totalAmount: Double
 ): List<PieEntry> {
@@ -46,11 +50,31 @@ import androidx.compose.foundation.verticalScroll
         entries
     }
 }
-*/
+
 @Composable
 fun AnalyseScreen() {
 
-    //val plannedEntries = buildPlannedEntries(budgetCategories, totalAmount)
+    val budgetRepository = remember { BudgetRepository() }
+    val budgetCategoryRepository = remember { BudgetCategoryRepository() }
+
+    var activeBudget by remember { mutableStateOf<Budget?>(null) }
+    var budgetCategories by remember { mutableStateOf<List<BudgetCategory>>(emptyList()) }
+
+    LaunchedEffect(Unit) {
+        budgetRepository.getActiveBudgetFlow().collect { budget ->
+            activeBudget = budget
+        }
+    }
+
+    LaunchedEffect(activeBudget?.id) {
+        val id = activeBudget?.id ?: return@LaunchedEffect
+        budgetCategoryRepository.getActiveBudgetCategories(id).collect { cats ->
+            budgetCategories = cats
+        }
+    }
+
+    val totalAmount = activeBudget?.totalAmount ?: 0.0
+    val plannedEntries = buildPlannedEntries(budgetCategories, totalAmount)
 
     Column(
         modifier = Modifier
@@ -80,11 +104,20 @@ fun AnalyseScreen() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        PieChartBox(
-            title = "Prévu",
-            //entries = plannedEntries,
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-        )
+        if (plannedEntries.isNotEmpty()) {
+            PieChartBox(
+                title = "Prévu",
+                entries = plannedEntries,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+            )
+        } else {
+            Text(
+                text = "Aucun budget actif",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(16.dp)
+            )
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 

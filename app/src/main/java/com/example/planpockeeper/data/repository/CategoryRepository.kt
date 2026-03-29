@@ -2,7 +2,6 @@ package com.example.planpockeeper.data.repository
 
 import com.example.planpockeeper.data.model.Category
 import com.google.firebase.auth.ktx.auth
-import com.google.firebase.firestore.firestore
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.channels.awaitClose

@@ -46,6 +46,7 @@ fun PieChartBox(
 
         var pieChartRef by remember { mutableStateOf<PieChart?>(null) }
         val holeColor = color.copy(alpha = 0f).toArgb()
+        var overlayRef by remember { mutableStateOf<PieLabelOverlayView?>(null) }
 
         AndroidView(
             modifier = Modifier
@@ -72,8 +73,13 @@ fun PieChartBox(
                 }
             },
             update = { chart ->
+                val dataSet = PieDataSet(entries, "").apply {
+                    colors = ColorTemplate.COLORFUL_COLORS.toMutableList()
+                }
+                chart.data = PieData(dataSet)
                 chart.setHoleColor(holeColor)
                 chart.invalidate()
+                overlayRef?.refresh()
             }
         )
 
@@ -83,6 +89,7 @@ fun PieChartBox(
                 factory = { context ->
                     PieLabelOverlayView(context, chart).apply {
                         setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                        overlayRef = this
                     }
                 }
             )

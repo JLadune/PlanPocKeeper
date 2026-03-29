@@ -27,7 +27,6 @@ import androidx.compose.ui.window.Dialog
 import com.example.planpockeeper.data.model.Budget
 import com.example.planpockeeper.data.model.BudgetCategory
 import com.example.planpockeeper.data.model.Category
-import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.firestore
@@ -37,6 +36,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import com.google.firebase.Firebase
 
 // ─── Direct Firestore helpers (no repository layer) ──────────────────────
 

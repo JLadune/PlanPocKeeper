@@ -17,6 +17,10 @@ class PieLabelOverlayView(
     private val pieChart: PieChart
 ) : View(context) {
 
+    fun refresh() {
+        invalidate()
+    }
+
     private val textPaint = Paint().apply {
         color = android.graphics.Color.BLACK
         textSize = 40f
