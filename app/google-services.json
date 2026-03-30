@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "258893519270",
+    "project_id": "planpockeeper",
+    "storage_bucket": "planpockeeper.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:258893519270:android:66e15c22434a0c4471d767",
+        "android_client_info": {
+          "package_name": "com.example.planpockeeper"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCL26VqGZD53bEe4uwLC1zLL7JdfE-J1TI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
