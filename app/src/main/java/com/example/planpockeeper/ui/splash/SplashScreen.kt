@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.Stroke
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
@@ -96,9 +97,40 @@ fun BubblesBackground() {
         canvasSize = Offset(size.width, size.height)
 
         bubbles.forEach { bubble ->
+
+            // Main translucent body
             drawCircle(
-                color = bubble.color.copy(alpha = 0.4f),
+                color = bubble.color.copy(alpha = 0.25f),
                 radius = bubble.radius,
+                center = bubble.position
+            )
+
+            // Soft highlight (top-left)
+            drawCircle(
+                color = Color.White.copy(alpha = 0.35f),
+                radius = bubble.radius * 0.35f,
+                center = bubble.position + Offset(
+                    x = -bubble.radius * 0.3f,
+                    y = -bubble.radius * 0.3f
+                )
+            )
+
+            // Specular rim (thin bright edge)
+            drawCircle(
+                color = Color.White.copy(alpha = 0.15f),
+                radius = bubble.radius,
+                center = bubble.position,
+                style = Stroke(width = bubble.radius * 0.12f)
+            )
+
+            // Slight color shift for iridescence
+            drawCircle(
+                color = bubble.color.copy(alpha = 0.15f)
+                    .copy(
+                        red = (bubble.color.red * 1.1f).coerceAtMost(1f),
+                        blue = (bubble.color.blue * 1.2f).coerceAtMost(1f)
+                    ),
+                radius = bubble.radius * 0.9f,
                 center = bubble.position
             )
         }
