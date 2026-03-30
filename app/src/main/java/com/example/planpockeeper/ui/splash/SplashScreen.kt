@@ -4,22 +4,111 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.*
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
 import com.example.planpockeeper.ui.theme.Fond
 import kotlinx.coroutines.delay
+import kotlin.math.*
+import kotlin.random.Random
+
+data class Bubble(
+    var position: Offset,
+    var velocity: Offset,
+    val radius: Float,
+    val color: Color
+)
+
+@Composable
+fun BubblesBackground() {
+    val bubbles = remember { mutableStateListOf<Bubble>() }
+
+    val colors = listOf(
+        Color(0xFFD48A98),
+        Color(0xFFB15E6C),
+        Color(0xFF9FD6CE)
+    )
+
+    val spawnRate = 0.5f
+    val acceleration = Offset(0f, -500f)
+    val friction = 0.2f
+
+    var canvasSize by remember { mutableStateOf(Offset.Zero) }
+
+    LaunchedEffect(Unit) {
+        var lastTime = 0L
+
+        while (true) {
+            withFrameNanos { now ->
+                if (lastTime == 0L) lastTime = now
+                val dt = (now - lastTime) / 1_000_000_000f
+                lastTime = now
+
+                val width = canvasSize.x
+                val height = canvasSize.y
+
+                if (width == 0f || height == 0f) return@withFrameNanos
+
+                val spawnPoint = Offset(width / 2f, height + 50f)
+
+                if (Random.nextFloat() < spawnRate) {
+                    val angle = Random.nextFloat() * (PI/2).toFloat() + (PI/4).toFloat()
+                    val speed = Random.nextFloat() * 300f + 800f
+
+                    val velocity = Offset(
+                        cos(angle) * speed,
+                        -abs(sin(angle) * speed)
+                    )
+
+                    bubbles.add(
+                        Bubble(
+                            position = spawnPoint,
+                            velocity = velocity,
+                            radius = Random.nextFloat() * 50f + 30f,
+                            color = colors.random()
+                        )
+                    )
+                }
+
+                bubbles.forEach { bubble ->
+                    bubble.velocity += acceleration * dt
+                    bubble.velocity -= bubble.velocity * friction * dt
+                    bubble.position += bubble.velocity * dt
+                }
+
+                bubbles.removeAll { it.position.y < -100f }
+            }
+        }
+    }
+
+    Canvas(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        canvasSize = Offset(size.width, size.height)
+
+        bubbles.forEach { bubble ->
+            drawCircle(
+                color = bubble.color.copy(alpha = 0.4f),
+                radius = bubble.radius,
+                center = bubble.position
+            )
+        }
+    }
+}
 
 @Composable
 fun SplashScreen(onFinished: () -> Unit) {
     LaunchedEffect(Unit) {
-        delay(2000)
+        delay(3000)
         onFinished()
     }
 
@@ -29,6 +118,8 @@ fun SplashScreen(onFinished: () -> Unit) {
             .background(Fond),
         contentAlignment = Alignment.Center
     ) {
+        BubblesBackground()
+
         val context = LocalContext.current
         AsyncImage(
             model = ImageRequest.Builder(context)
