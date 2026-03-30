@@ -46,8 +46,9 @@ fun PieChartBox(
         )
 
         var pieChartRef by remember { mutableStateOf<PieChart?>(null) }
-        val holeColor = color.copy(alpha = 0f).toArgb()
         var overlayRef by remember { mutableStateOf<PieLabelOverlayView?>(null) }
+        var isChartReady by remember { mutableStateOf(false) }
+        val holeColor = color.copy(alpha = 0f).toArgb()
 
         AndroidView(
             modifier = Modifier
@@ -55,10 +56,6 @@ fun PieChartBox(
                 .align(Alignment.Center),
             factory = { context ->
                 PieChart(context).apply {
-                    val dataSet = PieDataSet(entries, "").apply {
-                        colors = ColorTemplate.COLORFUL_COLORS.toMutableList()
-                    }
-                    data = PieData(dataSet)
                     setUsePercentValues(false)
                     isDrawHoleEnabled = true
                     holeRadius = 80f
@@ -70,6 +67,7 @@ fun PieChartBox(
                     setBackgroundColor(android.graphics.Color.TRANSPARENT)
                     renderer = SilentPieChartRenderer(this, animator, viewPortHandler)
                     pieChartRef = this
+                    isChartReady = true
                     invalidate()
                 }
             },
@@ -84,16 +82,18 @@ fun PieChartBox(
             }
         )
 
-        pieChartRef?.let { chart ->
-            AndroidView(
-                modifier = Modifier.matchParentSize(),
-                factory = { context ->
-                    PieLabelOverlayView(context, chart).apply {
-                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                        overlayRef = this
+        if (isChartReady) {
+            pieChartRef?.let { chart ->
+                AndroidView(
+                    modifier = Modifier.matchParentSize(),
+                    factory = { context ->
+                        PieLabelOverlayView(context, chart).apply {
+                            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                            overlayRef = this
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     }
 }

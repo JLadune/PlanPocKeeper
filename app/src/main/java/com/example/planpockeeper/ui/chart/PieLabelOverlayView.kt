@@ -47,12 +47,12 @@ class PieLabelOverlayView(
         super.onDraw(c)
         if (pieChart.data == null) return
         if (pieChart.width == 0 || pieChart.height == 0) return
+        if (pieChart.data.dataSetCount == 0) return
+        if (pieChart.drawAngles == null || pieChart.drawAngles.isEmpty()) return
 
         val dataSet = pieChart.data.dataSets[0] as PieDataSet
         val count = dataSet.entryCount
-
-        // Centre du PieChart dans les coordonnées de l'overlay (toute la Box)
-        // On calcule l'offset car le PieChart est centré dans la Box
+        if (count == 0) return
         val offsetX = (width - pieChart.width) / 2f
         val offsetY = (height - pieChart.height) / 2f
         val centerX = offsetX + pieChart.width / 2f

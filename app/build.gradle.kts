@@ -15,7 +15,7 @@ android {
     defaultConfig {
         applicationId = "com.example.planpockeeper"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 33
         versionCode = 1
         versionName = "1.0"
 

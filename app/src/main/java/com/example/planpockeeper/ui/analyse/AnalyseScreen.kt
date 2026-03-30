@@ -56,6 +56,27 @@ fun buildPlannedEntries(
     return Pair(entries, colors)
 }
 
+fun buildRealEntries(
+    budgetCategories: List<BudgetCategory>
+): Pair<List<PieEntry>, List<Int>> {
+    val totalSpent = budgetCategories.sumOf { it.spentAmount }
+    if (totalSpent <= 0.0) return Pair(emptyList(), emptyList())
+
+    val entries = mutableListOf<PieEntry>()
+    val colors = mutableListOf<Int>()
+
+    budgetCategories.filter { it.spentAmount > 0 }.forEach { cat ->
+        val pct = ((cat.spentAmount / totalSpent) * 100).toFloat()
+        entries.add(PieEntry(pct, cat.categoryName))
+        val c = runCatching {
+            android.graphics.Color.parseColor(cat.color)
+        }.getOrElse { android.graphics.Color.GRAY }
+        colors.add(c)
+    }
+
+    return Pair(entries, colors)
+}
+
 @Composable
 fun AnalyseScreen() {
 
@@ -80,6 +101,7 @@ fun AnalyseScreen() {
 
     val totalAmount = activeBudget?.totalAmount ?: 0.0
     val (plannedEntries, plannedColors) = buildPlannedEntries(budgetCategories, totalAmount)
+    val (realEntries, realColors) = buildRealEntries(budgetCategories)
 
     Column(
         modifier = Modifier
@@ -97,15 +119,21 @@ fun AnalyseScreen() {
                 .padding(start = 16.dp, bottom = 12.dp, top = 16.dp)
         )
 
-        PieChartBox(
-            title = "Réel",
-            entries = listOf(
-                PieEntry(40f, "Catégorie 1"),
-                PieEntry(30f, "Catégorie 2"),
-                PieEntry(30f, "Catégorie 3")
-            ),
-            color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f)
-        )
+        if (realEntries.isNotEmpty()) {
+            PieChartBox(
+                title = "Réel",
+                entries = realEntries,
+                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f),
+                pieColors = realColors
+            )
+        } else {
+            Text(
+                text = "Aucune dépense enregistrée",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(16.dp)
+            )
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -137,14 +165,15 @@ fun AnalyseScreen() {
                 .padding(start = 16.dp, bottom = 12.dp)
         )
 
-        val fakeData = listOf(
-            BudgetSummaryItem("Catégorie 1", 500.0, 620.0),
-            BudgetSummaryItem("Catégorie 2", 300.0, 210.0),
-            BudgetSummaryItem("Catégorie 3", 400.0, 390.0),
-            BudgetSummaryItem("Catégorie 4", 200.0, 80.0)
-        )
+        val summaryData = budgetCategories.map { cat ->
+            BudgetSummaryItem(
+                name = cat.categoryName,
+                planned = cat.plannedAmount,
+                spent = cat.spentAmount
+            )
+        }
 
-        BudgetSummaryTable(categories = fakeData)
+        BudgetSummaryTable(categories = summaryData)
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -159,9 +188,9 @@ fun AnalyseScreen() {
         )
 
         BilanCard(
-            totalPlanned = fakeData.sumOf { it.planned },
-            totalSpent = fakeData.sumOf { it.spent },
-            categories = fakeData,
+            totalPlanned = totalAmount,
+            totalSpent = budgetCategories.sumOf { it.spentAmount },
+            categories = summaryData,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).align(Alignment.Start)
         )
 
@@ -178,8 +207,10 @@ fun AnalyseScreen() {
                 .padding(start = 16.dp, bottom = 12.dp)
         )
 
-        AnalyseCard(categories = fakeData,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).align(Alignment.Start))
+        AnalyseCard(
+            categories = summaryData,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).align(Alignment.Start)
+        )
 
         Spacer(modifier = Modifier.height(16.dp))
 
