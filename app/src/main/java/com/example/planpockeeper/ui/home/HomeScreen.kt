@@ -33,8 +33,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.planpockeeper.data.model.Budget
 import com.example.planpockeeper.data.model.BudgetCategory
+import com.example.planpockeeper.data.model.Expense
 import com.example.planpockeeper.data.repository.BudgetCategoryRepository
 import com.example.planpockeeper.data.repository.BudgetRepository
+import com.example.planpockeeper.data.repository.ExpenseRepository
 import com.example.planpockeeper.ui.analyse.buildRealEntries
 import com.example.planpockeeper.ui.chart.PieChartBox
 
@@ -42,9 +44,12 @@ import com.example.planpockeeper.ui.chart.PieChartBox
 fun HomeScreen() {
     val budgetRepository = remember { BudgetRepository() }
     val budgetCategoryRepository = remember { BudgetCategoryRepository() }
+    val expenseRepository = remember { ExpenseRepository() }
 
     var activeBudget by remember { mutableStateOf<Budget?>(null) }
     var budgetCategories by remember { mutableStateOf<List<BudgetCategory>>(emptyList()) }
+    var expenseHistory by remember { mutableStateOf<List<Expense>>(emptyList()) }
+    var isExpenseLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         budgetRepository.getActiveBudgetFlow().collect { budget ->
@@ -56,6 +61,21 @@ fun HomeScreen() {
         val id = activeBudget?.id ?: return@LaunchedEffect
         budgetCategoryRepository.getActiveBudgetCategories(id).collect { cats ->
             budgetCategories = cats
+        }
+    }
+
+    LaunchedEffect(activeBudget?.id) {
+        val id = activeBudget?.id
+        if (id.isNullOrBlank()) {
+            expenseHistory = emptyList()
+            isExpenseLoading = false
+            return@LaunchedEffect
+        }
+
+        isExpenseLoading = true
+        expenseRepository.getExpenses(id).collect { expenses ->
+            expenseHistory = expenses
+            isExpenseLoading = false
         }
     }
 
@@ -132,8 +152,10 @@ fun HomeScreen() {
                 .padding(start = 16.dp, bottom = 12.dp, top = 16.dp)
         )
 
-
-        //à ajouter
+            ExpenseHistoryWidget(
+                expenses = expenseHistory,
+                isLoading = isExpenseLoading
+            )
 
         Spacer(modifier = Modifier.height(16.dp))
 
