@@ -34,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,6 +44,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -52,12 +54,31 @@ import com.example.planpockeeper.data.model.Expense
 import com.example.planpockeeper.data.repository.BudgetCategoryRepository
 import com.example.planpockeeper.data.repository.BudgetRepository
 import com.example.planpockeeper.data.repository.ExpenseRepository
+import com.example.planpockeeper.ui.theme.Cyan_Pastel_Dark
+import com.example.planpockeeper.ui.theme.Vieux_Rose_Dark
 import com.google.firebase.Timestamp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+
+@Composable
+fun DepensesTheme(content: @Composable () -> Unit) {
+    val colorScheme = lightColorScheme(
+        primary = Cyan_Pastel_Dark,
+        secondary = Cyan_Pastel_Dark,
+        background = Cyan_Pastel_Dark,
+        surface = Cyan_Pastel_Dark,
+        onPrimary = Color.White,
+        onSurface = Vieux_Rose_Dark
+    )
+
+    MaterialTheme(
+        colorScheme = colorScheme,
+        content = content
+    )
+}
 
 private enum class DepensesRoute {
     LIST,
@@ -93,17 +114,19 @@ private fun parseAmount(input: String): Double? {
 
 @Composable
 fun DepensesScreen() {
-    var route by remember { mutableStateOf(DepensesRoute.LIST) }
+    DepensesTheme {
+        var route by remember { mutableStateOf(DepensesRoute.LIST) }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        when (route) {
-            DepensesRoute.LIST -> DepensesHomeContent(
-                onAddExpense = { route = DepensesRoute.ADD }
-            )
-            DepensesRoute.ADD -> AddDepenseScreen(
-                onBack = { route = DepensesRoute.LIST },
-                onSaved = { route = DepensesRoute.LIST }
-            )
+        Box(modifier = Modifier.fillMaxSize()) {
+            when (route) {
+                DepensesRoute.LIST -> DepensesHomeContent(
+                    onAddExpense = { route = DepensesRoute.ADD }
+                )
+                DepensesRoute.ADD -> AddDepenseScreen(
+                    onBack = { route = DepensesRoute.LIST },
+                    onSaved = { route = DepensesRoute.LIST }
+                )
+            }
         }
     }
 }
@@ -166,6 +189,14 @@ private fun DepensesHomeContent(onAddExpense: () -> Unit) {
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("Ajouter une depense")
             }
+        }
+
+        item {
+            Text(
+                "Historique des dépenses",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
         }
 
         if (isLoading) {
@@ -304,6 +335,7 @@ private fun AddDepenseScreen(
             Text("Aucun budget actif. Retourne a l'ecran depenses.")
             return@Column
         }
+
 
         Text("Categorie")
         if (activeCategories.isEmpty()) {
