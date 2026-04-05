@@ -43,7 +43,12 @@ fun ParametresScreen(onBack: () -> Unit) {
             Button(onClick = {
                 NotificationHelper.sendPeriodEndNotification(context)
             }) {
-                Text("Tester la notification")
+                Text("Test notification fin de période")
+            }
+            Button(onClick = {
+                NotificationHelper.sendNoExpenseReminderNotification(context)
+            }) {
+                Text("Test notification inactivité")
             }
             Button(onClick = {
                 scope.launch {
@@ -56,7 +61,7 @@ fun ParametresScreen(onBack: () -> Unit) {
                     }
                 }
             }) {
-                Text("Tester l'email récapitulatif")
+                Text("Test email récapitulatif")
             }
         }
     }

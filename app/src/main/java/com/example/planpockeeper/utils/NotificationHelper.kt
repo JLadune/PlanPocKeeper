@@ -54,4 +54,28 @@ object NotificationHelper {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.notify(1001, notification)
     }
+
+    fun sendNoExpenseReminderNotification(context: Context) {
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setLargeIcon(
+                BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher)
+            )
+            .setContentTitle("Vous n'avez pas saisi de dépense récemment")
+            .setContentText("Aucune dépense enregistrée depuis 3 jours.")
+            .setStyle(
+                NotificationCompat.BigTextStyle()
+                    .bigText(
+                        "Vous n'avez pas enregistré de dépense depuis 3 jours. " +
+                                "Est-ce normal ? Pensez à tenir votre budget à jour."
+                    )
+            )
+            .setAutoCancel(true)
+            .build()
+
+        val manager = context.getSystemService(NotificationManager::class.java)
+        manager.notify(1002, notification)
+    }
+
+
 }

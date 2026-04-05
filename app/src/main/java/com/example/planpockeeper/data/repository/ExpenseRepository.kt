@@ -1,5 +1,6 @@
 package com.example.planpockeeper.data.repository
 
+import com.example.planpockeeper.data.model.Budget
 import com.example.planpockeeper.data.model.Expense
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.FieldValue
@@ -10,6 +11,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import java.util.Date
 
 class ExpenseRepository {
     private val db = Firebase.firestore
@@ -101,5 +103,32 @@ class ExpenseRepository {
                 trySend(expenses)
             }
         awaitClose { listener.remove() }
+    }
+
+    //avoir la dernière dépense
+    suspend fun getLastExpenseDate(budgetId: String): Date? {
+        return try {
+            val snapshot = db.collection("users").document(userId)
+                .collection("budget").document(budgetId)
+                .collection("expenses")
+                .orderBy("date", Query.Direction.DESCENDING)
+                .limit(1)
+                .get().await()
+
+            val lastExpense = snapshot.documents.firstOrNull()
+                ?.toObject(Expense::class.java)
+                ?.date?.toDate()
+
+            // Si aucune dépense, on retourne la date de début du budget
+            lastExpense ?: db.collection("users").document(userId)
+                .collection("budget")
+                .document(budgetId)
+                .get().await()
+                .toObject(Budget::class.java)
+                ?.startDate?.toDate()
+
+        } catch (e: Exception) {
+            null
+        }
     }
 }
