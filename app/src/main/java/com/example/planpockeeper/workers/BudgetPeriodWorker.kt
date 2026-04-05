@@ -31,10 +31,10 @@ class BudgetPeriodWorker(
             val summary = rolloverResult.getOrThrow()
 
             // Envoyer la notification locale
-            NotificationHelper.sendPeriodEndNotification(applicationContext, summary)
+            NotificationHelper.sendPeriodEndNotification(applicationContext)
 
             // Déclencher l'email récapitulatif via Firebase
-            EmailHelper.sendSummaryEmail(user.email ?: "", summary)
+            //EmailHelper.sendSummaryEmail(user.email ?: "", summary)
         }
 
         return Result.success()
