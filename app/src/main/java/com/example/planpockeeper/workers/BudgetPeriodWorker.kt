@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.planpockeeper.data.repository.BudgetRepository
+import com.example.planpockeeper.utils.EmailHelper
 import com.example.planpockeeper.utils.NotificationHelper
 import com.example.planpockeeper.utils.PeriodUtils
 import com.google.firebase.auth.ktx.auth
@@ -34,7 +35,7 @@ class BudgetPeriodWorker(
             NotificationHelper.sendPeriodEndNotification(applicationContext)
 
             // Déclencher l'email récapitulatif via Firebase
-            //EmailHelper.sendSummaryEmail(user.email ?: "", summary)
+            EmailHelper.sendSummaryEmail(user.email ?: "", summary)
         }
 
         return Result.success()

@@ -1,7 +1,9 @@
 package com.example.planpockeeper.data.repository
 
 import com.example.planpockeeper.data.model.Budget
+import com.example.planpockeeper.data.model.BudgetCategory
 import com.example.planpockeeper.data.model.BudgetSummary
+import com.example.planpockeeper.data.model.Expense
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
@@ -95,50 +97,43 @@ class BudgetRepository {
         awaitClose { listener.remove() }
     }
 
-// Nouvelle méthode à ajouter dans la classe BudgetRepository
-
-    /**
-     * Clôture la période courante et en démarre une nouvelle :
-     * 1. Supprime toutes les dépenses de la période
-     * 2. Remet spentAmount à 0 sur chaque budgetCategory
-     * 3. Met à jour la startDate du budget pour la prochaine période
-     *
-     * @return Le résumé des dépenses avant suppression (pour l'email)
-     */
     suspend fun rolloverBudget(budget: Budget): Result<BudgetSummary> {
         return try {
             val budgetDoc = budgetRef().document(budget.id)
 
-            // 1. Récupérer les dépenses pour le résumé
+            //Récupérer les dépenses
             val expensesSnap = budgetDoc.collection("expenses").get().await()
             val expenses = expensesSnap.documents.mapNotNull { doc ->
-                doc.toObject(com.example.planpockeeper.data.model.Expense::class.java)
+                doc.toObject(Expense::class.java)
             }
 
-            // 2. Construire le résumé avant suppression
-            val categoryTotals = expenses
-                .groupBy { it.categoryName }
-                .mapValues { entry -> entry.value.sumOf { it.amount } }
+            //Récupérer les catégories
+            val categoriesSnap = budgetDoc.collection("budgetCategories").get().await()
 
+            //Construire le résumé
             val summary = BudgetSummary(
                 budgetDescription = budget.description,
                 totalPlanned = budget.totalAmount,
                 totalSpent = expenses.sumOf { it.amount },
-                categoryTotals = categoryTotals,
+                categoryTotals = expenses
+                    .groupBy { it.categoryName }
+                    .mapValues { entry -> entry.value.sumOf { it.amount } },
+                categoryPlanned = categoriesSnap.documents
+                    .mapNotNull { doc -> doc.toObject(BudgetCategory::class.java) }
+                    .associate { it.categoryName to it.plannedAmount },
                 periodStart = budget.startDate.toDate(),
                 periodEnd = PeriodUtils.computeEndDate(budget)
             )
 
-            // 3. Supprimer toutes les dépenses
-            expensesSnap.documents.forEach { it.reference.delete().await() }
+            //Supprimer toutes les dépenses
+            expensesSnap.documents.forEach { doc -> doc.reference.delete().await() }
 
-            // 4. Remettre spentAmount à 0 sur chaque catégorie
-            val categoriesSnap = budgetDoc.collection("budgetCategories").get().await()
+            //Remettre spentAmount à 0
             categoriesSnap.documents.forEach { doc ->
                 doc.reference.update("spentAmount", 0.0).await()
             }
 
-            // 5. Avancer la startDate à la prochaine période
+            //Avancer la startDate
             val nextStart = PeriodUtils.computeNextStartDate(budget)
             budgetDoc.update("startDate", Timestamp(nextStart)).await()
 
