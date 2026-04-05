@@ -10,10 +10,12 @@ import androidx.navigation.compose.rememberNavController
 import com.example.planpockeeper.ui.auth.AuthScreen
 import com.example.planpockeeper.ui.splash.SplashScreen
 import com.example.planpockeeper.ui.theme.PlanPocKeeperTheme
+import com.example.planpockeeper.utils.WorkScheduler
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WorkScheduler.schedulePeriodCheck(this)
         setContent {
             PlanPocKeeperTheme {
                 AppNavigation()

@@ -71,5 +71,7 @@ dependencies {
     implementation("io.coil-kt:coil-svg:2.6.0")
     //ViewModel Support
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
-    implementation("com.github.PhilJay:MPAndroidChart:v3.1.0") //graphe
+    implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    implementation("androidx.core:core-ktx:1.13.1")
 }
