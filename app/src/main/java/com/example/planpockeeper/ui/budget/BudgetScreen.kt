@@ -447,6 +447,9 @@ fun BudgetScreen() {
     if (showAddCategoryDialog) {
         AddBudgetCategoryDialog(
             availableCategories = availableCategories,
+            alreadyUsedCategoryIds = budgetCategories.map { it.categoryId }.toSet(),
+            budgetTotal = activeBudget?.totalAmount ?: 0.0,
+            currentCategoriesTotal = budgetCategories.sumOf { it.plannedAmount },
             onDismiss = { showAddCategoryDialog = false },
             onConfirm = { category, amount ->
                 scope.launch {
@@ -474,6 +477,7 @@ fun BudgetScreen() {
 
     if (showAddCustomCategoryDialog) {
         CreateCategoryDialog(
+            existingCategories = availableCategories,
             onDismiss = { showAddCustomCategoryDialog = false },
             onConfirm = { name, color ->
                 scope.launch {
@@ -729,6 +733,9 @@ fun CreateBudgetDialog(
 @Composable
 fun AddBudgetCategoryDialog(
     availableCategories: List<Category>,
+    alreadyUsedCategoryIds: Set<String>,
+    budgetTotal: Double,
+    currentCategoriesTotal: Double,
     onDismiss: () -> Unit,
     onConfirm: (Category, Double) -> Unit,
     onCreateNew: () -> Unit
@@ -736,6 +743,14 @@ fun AddBudgetCategoryDialog(
     var selectedCategory by remember { mutableStateOf<Category?>(null) }
     var amount by remember { mutableStateOf("") }
     var showMenu by remember { mutableStateOf(false) }
+
+    // Catégories disponibles = pas encore utilisées dans le budget
+    val selectableCategories = availableCategories.filter { it.id !in alreadyUsedCategoryIds }
+
+    val remaining = budgetTotal - currentCategoriesTotal
+    val parsedAmount = amount.toDoubleOrNull()
+    val amountExceedsRemaining = parsedAmount != null && parsedAmount > remaining
+    val maxAvailable = remaining
 
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp)) {
@@ -748,6 +763,8 @@ fun AddBudgetCategoryDialog(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
+
+                //Dropdown catégories filtrées
                 ExposedDropdownMenuBox(
                     expanded = showMenu,
                     onExpandedChange = { showMenu = it }
@@ -766,13 +783,13 @@ fun AddBudgetCategoryDialog(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
-                        if (availableCategories.isEmpty()) {
+                        if (selectableCategories.isEmpty()) {
                             DropdownMenuItem(
                                 text = { Text("Aucune catégorie disponible") },
                                 onClick = {}
                             )
                         }
-                        availableCategories.forEach { cat ->
+                        selectableCategories.forEach { cat ->
                             DropdownMenuItem(
                                 text = {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -799,13 +816,37 @@ fun AddBudgetCategoryDialog(
                         )
                     }
                 }
+
+                //Montant
                 OutlinedTextField(
                     value = amount,
-                    onValueChange = { amount = it },
+                    onValueChange = { input ->
+                        // chiffres et un seul point uniquement
+                        val filtered = input.replace(',', '.')
+                        val result = buildString {
+                            filtered.forEachIndexed { i, c ->
+                                if (c.isDigit()) append(c)
+                                else if (c == '.' && i != 0 && !contains('.')) append(c)
+                            }
+                        }
+                        amount = result
+                    },
                     label = { Text("Montant prévu (€)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    isError = amountExceedsRemaining,
+                    supportingText = if (amountExceedsRemaining) {
+                        {
+                            Text(
+                                "Dépasse le budget restant. Max disponible : ${maxAvailable.toInt()}€",
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 11.sp
+                            )
+                        }
+                    } else null
                 )
+
+                //Boutons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -817,8 +858,12 @@ fun AddBudgetCategoryDialog(
                         onClick = {
                             val cat = selectedCategory ?: return@Button
                             val amt = amount.toDoubleOrNull() ?: return@Button
+                            if (amt <= 0 || amountExceedsRemaining) return@Button
                             onConfirm(cat, amt)
                         },
+                        enabled = selectedCategory != null
+                                && amount.toDoubleOrNull() != null
+                                && !amountExceedsRemaining,
                         modifier = Modifier.weight(1f)
                     ) { Text("Ajouter") }
                 }
@@ -878,7 +923,12 @@ fun EditBudgetCategoryDialog(
 // ─── Create Custom Category Dialog ───────────────────────────────────────
 
 @Composable
-fun CreateCategoryDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> Unit) {
+fun CreateCategoryDialog(
+    existingCategories: List<Category>,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Unit
+
+) {
     var name by remember { mutableStateOf("") }
     var selectedColor by remember { mutableStateOf("#FF5733") }
     val presetColors = listOf(
@@ -886,6 +936,16 @@ fun CreateCategoryDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> U
         "#2196F3", "#9C27B0", "#E91E63", "#00BCD4",
         "#795548", "#607D8B"
     )
+
+    // ── Validations ──────────────────────────────────────────────────────
+    val nameTaken = name.isNotBlank() &&
+            existingCategories.any { it.name.trim().equals(name.trim(), ignoreCase = true) }
+
+    val colorTaken = existingCategories.any {
+        it.color.trim().equals(selectedColor.trim(), ignoreCase = true)
+    }
+
+    val canConfirm = name.isNotBlank() && !nameTaken && !colorTaken
 
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp)) {
@@ -898,12 +958,19 @@ fun CreateCategoryDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> U
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
+
+                // ── Nom ──────────────────────────────────────────────────
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Nom de la catégorie") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    supportingText = if (nameTaken) {
+                        { Text("Ce nom est déjà utilisé.", color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
+                    } else null
                 )
+
+                // ── Couleur ───────────────────────────────────────────────
                 Text("Couleur", style = MaterialTheme.typography.labelMedium)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -913,11 +980,14 @@ fun CreateCategoryDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> U
                         val c = runCatching {
                             Color(android.graphics.Color.parseColor(hex))
                         }.getOrElse { Color.Gray }
+                        val isUsed = existingCategories.any {
+                            it.color.trim().equals(hex.trim(), ignoreCase = true)
+                        }
                         Box(
                             modifier = Modifier
                                 .size(28.dp)
                                 .clip(CircleShape)
-                                .background(c)
+                                .background(c.copy(alpha = if (isUsed) 0.3f else 1f))  // grisé si déjà pris
                                 .border(
                                     width = if (selectedColor == hex) 3.dp else 0.dp,
                                     color = MaterialTheme.colorScheme.onSurface,
@@ -927,6 +997,15 @@ fun CreateCategoryDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> U
                         )
                     }
                 }
+                if (colorTaken) {
+                    Text(
+                        "Cette couleur est déjà utilisée par une autre catégorie.",
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 11.sp
+                    )
+                }
+
+                // ── Boutons ───────────────────────────────────────────────
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -935,7 +1014,8 @@ fun CreateCategoryDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> U
                         Text("Annuler")
                     }
                     Button(
-                        onClick = { if (name.isNotBlank()) onConfirm(name, selectedColor) },
+                        onClick = { if (canConfirm) onConfirm(name, selectedColor) },
+                        enabled = canConfirm,
                         modifier = Modifier.weight(1f)
                     ) { Text("Créer") }
                 }
