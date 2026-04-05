@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.Button
@@ -32,9 +33,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -297,7 +302,7 @@ private fun AddDepenseScreen(
     }
 
     if (showDatePicker) {
-        val datePickerState = androidx.compose.material3.rememberDatePickerState(
+        val datePickerState = rememberDatePickerState(
             initialSelectedDateMillis = expenseDateMillis
         )
         DatePickerDialog(
@@ -316,150 +321,153 @@ private fun AddDepenseScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Row {
-            Button(onClick = onBack) {
-                Text("Retour")
-            }
-        }
-
-        Text("Ajouter une depense", style = MaterialTheme.typography.headlineSmall)
-
-        if (activeBudget == null) {
-            Text("Aucun budget actif. Retourne a l'ecran depenses.")
-            return@Column
-        }
-
-
-        Text("Categorie")
-        if (activeCategories.isEmpty()) {
-            Text(
-                "Aucune categorie active pour ce budget. Ajoute d'abord une categorie dans l'onglet Budget.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        ExposedDropdownMenuBox(
-            expanded = categoryExpanded,
-            onExpandedChange = {
-                if (activeCategories.isNotEmpty()) {
-                    categoryExpanded = !categoryExpanded
-                }
-            }
-        ) {
-            OutlinedTextField(
-                value = activeCategories.firstOrNull { it.id == selectedCategoryId }?.categoryName ?: "",
-                onValueChange = {},
-                readOnly = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
-                modifier = Modifier
-                    .menuAnchor()
-                    .fillMaxWidth(),
-                enabled = activeCategories.isNotEmpty()
-            )
-
-            DropdownMenu(
-                expanded = categoryExpanded,
-                onDismissRequest = { categoryExpanded = false }
-            ) {
-                if (activeCategories.isEmpty()) {
-                    DropdownMenuItem(
-                        text = { Text("Aucune categorie active") },
-                        onClick = { categoryExpanded = false }
-                    )
-                }
-                activeCategories.forEach { cat ->
-                    DropdownMenuItem(
-                        text = { Text(cat.categoryName) },
-                        onClick = {
-                            selectedCategoryId = cat.id
-                            categoryExpanded = false
-                        }
-                    )
-                }
-            }
-        }
-
-        OutlinedTextField(
-            value = amountInput,
-            onValueChange = { amountInput = sanitizeAmountInput(it) },
-            label = { Text("Montant") },
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            singleLine = true
-        )
-
-        OutlinedTextField(
-            value = descriptionInput,
-            onValueChange = { descriptionInput = it },
-            label = { Text("Description") },
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 2
-        )
-
-        Text("Date")
-        Button(onClick = { showDatePicker = true }) {
-            Text(formatDate(expenseDateMillis))
-        }
-
-        Button(
-            onClick = {
-                val amount = parseAmount(amountInput)
-                if (amount == null || amount <= 0.0) {
-                    statusMessage = "Montant invalide."
-                    return@Button
-                }
-
-                val selectedCategory = activeCategories.firstOrNull { it.id == selectedCategoryId }
-                if (selectedCategory == null) {
-                    statusMessage = "Selectionne une categorie."
-                    return@Button
-                }
-
-                isSaving = true
-                statusMessage = null
-
-                scope.launch {
-                    val addResult = expenseRepository.addExpense(
-                        Expense(
-                            budgetId = activeBudget!!.id,
-                            categoryId = selectedCategory.id,
-                            categoryName = selectedCategory.categoryName,
-                            amount = amount,
-                            description = descriptionInput.trim(),
-                            date = Timestamp(Date(expenseDateMillis))
-                        )
-                    )
-
-                    isSaving = false
-
-                    if (addResult.isFailure) {
-                        statusMessage = addResult.exceptionOrNull()?.localizedMessage
-                            ?: "Erreur lors de l'ajout de la depense."
-                        return@launch
+    Scaffold(
+        containerColor = Color.Transparent,
+        topBar = {
+            TopAppBar(
+                title = { Text("Ajouter une dépense") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Retour")
                     }
-
-                    onSaved()
-                }
-            },
-            enabled = !isSaving && activeCategories.isNotEmpty(),
-            modifier = Modifier.fillMaxWidth()
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent
+                )
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(paddingValues)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text("Enregistrer la depense")
-        }
 
-        if (isSaving) {
-            CircularProgressIndicator()
-        }
+            if (activeBudget == null) {
+                Text("Aucun budget actif. Retourne a l'ecran depenses.")
+                return@Column
+            }
 
-        if (!statusMessage.isNullOrBlank()) {
-            Text(statusMessage ?: "")
+            Text("Categorie")
+            if (activeCategories.isEmpty()) {
+                Text(
+                    "Aucune categorie active pour ce budget. Ajoute d'abord une categorie dans l'onglet Budget.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            ExposedDropdownMenuBox(
+                expanded = categoryExpanded,
+                onExpandedChange = {
+                    if (activeCategories.isNotEmpty()) {
+                        categoryExpanded = !categoryExpanded
+                    }
+                }
+            ) {
+                OutlinedTextField(
+                    value = activeCategories.firstOrNull { it.id == selectedCategoryId }?.categoryName ?: "",
+                    onValueChange = {},
+                    readOnly = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth(),
+                    enabled = activeCategories.isNotEmpty()
+                )
+                DropdownMenu(
+                    expanded = categoryExpanded,
+                    onDismissRequest = { categoryExpanded = false }
+                ) {
+                    if (activeCategories.isEmpty()) {
+                        DropdownMenuItem(
+                            text = { Text("Aucune categorie active") },
+                            onClick = { categoryExpanded = false }
+                        )
+                    }
+                    activeCategories.forEach { cat ->
+                        DropdownMenuItem(
+                            text = { Text(cat.categoryName) },
+                            onClick = {
+                                selectedCategoryId = cat.id
+                                categoryExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            OutlinedTextField(
+                value = amountInput,
+                onValueChange = { amountInput = sanitizeAmountInput(it) },
+                label = { Text("Montant") },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                singleLine = true
+            )
+
+            OutlinedTextField(
+                value = descriptionInput,
+                onValueChange = { descriptionInput = it },
+                label = { Text("Description") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2
+            )
+
+            Text("Date")
+            Button(onClick = { showDatePicker = true }) {
+                Text(formatDate(expenseDateMillis))
+            }
+
+            Button(
+                onClick = {
+                    val amount = parseAmount(amountInput)
+                    if (amount == null || amount <= 0.0) {
+                        statusMessage = "Montant invalide."
+                        return@Button
+                    }
+                    val selectedCategory = activeCategories.firstOrNull { it.id == selectedCategoryId }
+                    if (selectedCategory == null) {
+                        statusMessage = "Selectionne une categorie."
+                        return@Button
+                    }
+                    isSaving = true
+                    statusMessage = null
+                    scope.launch {
+                        val addResult = expenseRepository.addExpense(
+                            Expense(
+                                budgetId = activeBudget!!.id,
+                                categoryId = selectedCategory.id,
+                                categoryName = selectedCategory.categoryName,
+                                amount = amount,
+                                description = descriptionInput.trim(),
+                                date = Timestamp(Date(expenseDateMillis))
+                            )
+                        )
+                        isSaving = false
+                        if (addResult.isFailure) {
+                            statusMessage = addResult.exceptionOrNull()?.localizedMessage
+                                ?: "Erreur lors de l'ajout de la depense."
+                            return@launch
+                        }
+                        onSaved()
+                    }
+                },
+                enabled = !isSaving && activeCategories.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Enregistrer la depense")
+            }
+
+            if (isSaving) {
+                CircularProgressIndicator()
+            }
+
+            if (!statusMessage.isNullOrBlank()) {
+                Text(statusMessage ?: "")
+            }
         }
     }
 }

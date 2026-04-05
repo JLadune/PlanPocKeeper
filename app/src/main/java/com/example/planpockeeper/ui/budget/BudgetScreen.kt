@@ -497,6 +497,10 @@ fun BudgetScreen() {
     editingBudgetCategory?.let { cat ->
         EditBudgetCategoryDialog(
             budgetCategory = cat,
+            budgetTotal = activeBudget?.totalAmount ?: 0.0,                                       // ← nouveau
+            currentCategoriesTotal = budgetCategories                                              // ← nouveau
+                .filter { it.id != cat.id }
+                .sumOf { it.plannedAmount },
             onDismiss = { editingBudgetCategory = null },
             onConfirm = { newAmount ->
                 scope.launch {
@@ -877,10 +881,16 @@ fun AddBudgetCategoryDialog(
 @Composable
 fun EditBudgetCategoryDialog(
     budgetCategory: BudgetCategory,
+    budgetTotal: Double,
+    currentCategoriesTotal: Double,
     onDismiss: () -> Unit,
     onConfirm: (Double) -> Unit
 ) {
     var amount by remember { mutableStateOf(budgetCategory.plannedAmount.toString()) }
+
+    val remaining = budgetTotal - currentCategoriesTotal
+    val parsedAmount = amount.toDoubleOrNull()
+    val amountExceedsRemaining = parsedAmount != null && parsedAmount > remaining
 
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp)) {
@@ -895,10 +905,29 @@ fun EditBudgetCategoryDialog(
                 )
                 OutlinedTextField(
                     value = amount,
-                    onValueChange = { amount = it },
+                    onValueChange = { input ->
+                        val filtered = input.replace(',', '.')
+                        val result = buildString {
+                            filtered.forEachIndexed { i, c ->
+                                if (c.isDigit()) append(c)
+                                else if (c == '.' && i != 0 && !contains('.')) append(c)
+                            }
+                        }
+                        amount = result
+                    },
                     label = { Text("Nouveau montant (€)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    isError = amountExceedsRemaining,
+                    supportingText = if (amountExceedsRemaining) {
+                        {
+                            Text(
+                                "Dépasse le budget disponible. Max : ${remaining.toInt()}€",
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 11.sp
+                            )
+                        }
+                    } else null
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -910,8 +939,10 @@ fun EditBudgetCategoryDialog(
                     Button(
                         onClick = {
                             val amt = amount.toDoubleOrNull() ?: return@Button
+                            if (amountExceedsRemaining) return@Button
                             onConfirm(amt)
                         },
+                        enabled = parsedAmount != null && parsedAmount > 0 && !amountExceedsRemaining,
                         modifier = Modifier.weight(1f)
                     ) { Text("Sauvegarder") }
                 }
