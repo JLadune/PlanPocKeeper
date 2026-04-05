@@ -35,10 +35,6 @@ import com.example.planpockeeper.ui.depenses.DepensesScreen
 import com.example.planpockeeper.ui.home.HomeScreen
 import com.example.planpockeeper.ui.profile.InfosCompteScreen
 import com.example.planpockeeper.ui.profile.ParametresScreen
-import com.example.planpockeeper.ui.theme.Blanc_Cassé
-import com.example.planpockeeper.ui.theme.Blanc_Cassé_Dark
-import com.example.planpockeeper.ui.theme.Vieux_Rose
-import com.example.planpockeeper.ui.theme.Vieux_Rose_Dark
 
 data class NavItem(
     val route: String,
@@ -72,9 +68,8 @@ fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
         label = "profilePanel"
     )
 
-    val isDark = isSystemInDarkTheme()
-    val barColor = if (isDark) Blanc_Cassé_Dark else Blanc_Cassé
-    val contentColor = if (isDark) Vieux_Rose_Dark else Vieux_Rose
+    val barColor = MaterialTheme.colorScheme.surfaceVariant
+    val contentColor = MaterialTheme.colorScheme.primary
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(

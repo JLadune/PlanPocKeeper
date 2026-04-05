@@ -37,6 +37,9 @@ import java.util.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import com.google.firebase.Firebase
+import androidx.compose.ui.platform.LocalContext
+import com.example.planpockeeper.utils.CurrencyFormatter
+import com.example.planpockeeper.utils.PreferencesManager
 
 // ─── Direct Firestore helpers (no repository layer) ──────────────────────
 
@@ -61,6 +64,10 @@ private fun budgetCategoryCol(budgetId: String) = Firebase.firestore
 @Composable
 fun BudgetScreen() {
     val scope = rememberCoroutineScope()
+
+    val context = LocalContext.current
+    val prefsManager = remember { PreferencesManager(context) }
+    val currency by prefsManager.currency.collectAsState(initial = "EUR")
 
     var activeBudget by remember { mutableStateOf<Budget?>(null) }
     var budgetCategories by remember { mutableStateOf<List<BudgetCategory>>(emptyList()) }
@@ -215,7 +222,10 @@ fun BudgetScreen() {
                     }
 
                     Text(
-                        text = "${activeBudget?.totalAmount?.toInt() ?: 0}€",
+                        text = CurrencyFormatter.format(
+                            activeBudget?.totalAmount ?: 0.0,
+                            currency
+                        ),
                         fontSize = 48.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
@@ -253,12 +263,12 @@ fun BudgetScreen() {
                         ) {
                             Column {
                                 Text("Dépensé", style = MaterialTheme.typography.labelSmall)
-                                Text("${totalSpent.toInt()}€", fontWeight = FontWeight.SemiBold)
+                                Text(CurrencyFormatter.format(totalSpent, currency), fontWeight = FontWeight.SemiBold)
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text("Restant", style = MaterialTheme.typography.labelSmall)
                                 Text(
-                                    "${remaining.toInt()}€",
+                                    CurrencyFormatter.format(remaining, currency),
                                     fontWeight = FontWeight.SemiBold,
                                     color = if (remaining < 0) MaterialTheme.colorScheme.error
                                     else MaterialTheme.colorScheme.primary
@@ -352,12 +362,12 @@ fun BudgetScreen() {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(cat.categoryName, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "${cat.spentAmount.toInt()}€ / ${cat.plannedAmount.toInt()}€",
+                            "${CurrencyFormatter.format(cat.spentAmount, currency)} / ${CurrencyFormatter.format(cat.plannedAmount, currency)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            "Restant : ${catRemaining.toInt()}€",
+                            "Restant : ${CurrencyFormatter.format(catRemaining, currency)}",
                             style = MaterialTheme.typography.labelSmall,
                             color = if (catRemaining < 0) MaterialTheme.colorScheme.error
                             else MaterialTheme.colorScheme.primary
@@ -404,6 +414,7 @@ fun BudgetScreen() {
     if (showCreateDialog) {
         CreateBudgetDialog(
             existing = activeBudget,
+            currency = currency,
             onDismiss = { showCreateDialog = false },
             onConfirm = { amount, desc, start, periodical, period, customDays, end ->
                 val resolvedPeriodicity = when {
@@ -450,6 +461,7 @@ fun BudgetScreen() {
             alreadyUsedCategoryIds = budgetCategories.map { it.categoryId }.toSet(),
             budgetTotal = activeBudget?.totalAmount ?: 0.0,
             currentCategoriesTotal = budgetCategories.sumOf { it.plannedAmount },
+            currency = currency,
             onDismiss = { showAddCategoryDialog = false },
             onConfirm = { category, amount ->
                 scope.launch {
@@ -501,6 +513,7 @@ fun BudgetScreen() {
             currentCategoriesTotal = budgetCategories                                              // ← nouveau
                 .filter { it.id != cat.id }
                 .sumOf { it.plannedAmount },
+            currency = currency,
             onDismiss = { editingBudgetCategory = null },
             onConfirm = { newAmount ->
                 scope.launch {
@@ -523,6 +536,7 @@ fun BudgetScreen() {
 @Composable
 fun CreateBudgetDialog(
     existing: Budget?,
+    currency: String,
     onDismiss: () -> Unit,
     onConfirm: (Double, String, Date, Boolean, String, Int, Date?) -> Unit
 ) {
@@ -568,7 +582,7 @@ fun CreateBudgetDialog(
                     OutlinedTextField(
                         value = amount,
                         onValueChange = { amount = it },
-                        label = { Text("Montant total (€)") },
+                        label = { Text("Montant total (${CurrencyFormatter.getSymbol(currency)})") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -740,6 +754,7 @@ fun AddBudgetCategoryDialog(
     alreadyUsedCategoryIds: Set<String>,
     budgetTotal: Double,
     currentCategoriesTotal: Double,
+    currency : String,
     onDismiss: () -> Unit,
     onConfirm: (Category, Double) -> Unit,
     onCreateNew: () -> Unit
@@ -835,14 +850,14 @@ fun AddBudgetCategoryDialog(
                         }
                         amount = result
                     },
-                    label = { Text("Montant prévu (€)") },
+                    label = { Text("Montant prévu (${CurrencyFormatter.getSymbol(currency)})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
                     isError = amountExceedsRemaining,
                     supportingText = if (amountExceedsRemaining) {
                         {
                             Text(
-                                "Dépasse le budget restant. Max disponible : ${maxAvailable.toInt()}€",
+                                "Dépasse le budget restant. Max disponible : ${CurrencyFormatter.format(maxAvailable, currency)}",
                                 color = MaterialTheme.colorScheme.error,
                                 fontSize = 11.sp
                             )
@@ -883,6 +898,7 @@ fun EditBudgetCategoryDialog(
     budgetCategory: BudgetCategory,
     budgetTotal: Double,
     currentCategoriesTotal: Double,
+    currency : String,
     onDismiss: () -> Unit,
     onConfirm: (Double) -> Unit
 ) {
@@ -915,14 +931,14 @@ fun EditBudgetCategoryDialog(
                         }
                         amount = result
                     },
-                    label = { Text("Nouveau montant (€)") },
+                    label = { Text("Nouveau montant (${CurrencyFormatter.getSymbol(currency)})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
                     isError = amountExceedsRemaining,
                     supportingText = if (amountExceedsRemaining) {
                         {
                             Text(
-                                "Dépasse le budget disponible. Max : ${remaining.toInt()}€",
+                                "Dépasse le budget disponible. Max : ${CurrencyFormatter.format(remaining, currency)}",
                                 color = MaterialTheme.colorScheme.error,
                                 fontSize = 11.sp
                             )

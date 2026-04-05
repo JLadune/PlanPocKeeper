@@ -58,4 +58,30 @@ class AuthRepository {
         return snapshot.data
     }
 
+    suspend fun updateCurrency(currency: String): Result<Unit> {
+        return try {
+            val userId = auth.currentUser?.uid ?: return Result.failure(Exception("Non connecté"))
+            Firebase.firestore
+                .collection("users")
+                .document(userId)
+                .update("currency", currency).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getCurrency(): String? {
+        return try {
+            val userId = auth.currentUser?.uid ?: return null
+            val snapshot = Firebase.firestore
+                .collection("users")
+                .document(userId)
+                .get().await()
+            snapshot.getString("currency")
+        } catch (e: Exception) {
+            null
+        }
+    }
+
 }

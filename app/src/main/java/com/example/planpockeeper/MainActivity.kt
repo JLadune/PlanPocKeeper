@@ -1,5 +1,9 @@
 package com.example.planpockeeper
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import com.example.planpockeeper.utils.PreferencesManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -26,7 +30,10 @@ class MainActivity : ComponentActivity() {
             )
         }
         setContent {
-            PlanPocKeeperTheme {
+            val prefsManager = remember { PreferencesManager(applicationContext) }
+            val darkMode by prefsManager.darkMode.collectAsState(initial = false)
+
+            PlanPocKeeperTheme(darkMode = darkMode) {
                 AppNavigation()
             }
         }

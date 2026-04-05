@@ -75,4 +75,6 @@ dependencies {
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     implementation("androidx.core:core-ktx:1.13.1")
+    //Data Storage
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
 }
