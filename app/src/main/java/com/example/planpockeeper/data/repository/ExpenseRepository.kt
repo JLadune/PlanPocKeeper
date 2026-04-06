@@ -63,16 +63,24 @@ class ExpenseRepository {
     }
 
     // Modifier une dépense + ajuster spentAmount de la catégorie
-    suspend fun updateExpense(oldExpense: Expense, newExpense: Expense): Result<Unit> {
+    suspend fun updateExpense(newExpense: Expense): Result<Unit> {
         return try {
-            // Étape 1 — Mettre à jour la dépense
+            // Get old expense to compute the difference
+            val oldDoc = expensesRef(newExpense.budgetId)
+                .document(newExpense.id).get().await()
+            val oldExpense = oldDoc.toObject(Expense::class.java)
+            val oldAmount = oldExpense?.amount ?: 0.0
+
+            // Update the expense document
             expensesRef(newExpense.budgetId).document(newExpense.id)
                 .set(newExpense).await()
 
-            // Étape 2 — Ajuster spentAmount (enlever l'ancien montant, ajouter le nouveau)
-            val difference = newExpense.amount - oldExpense.amount
-            budgetCategoryRef(newExpense.budgetId, newExpense.categoryId)
-                .update("spentAmount", FieldValue.increment(difference)).await()
+            // Adjust spentAmount
+            val difference = newExpense.amount - oldAmount
+            if (difference != 0.0) {
+                budgetCategoryRef(newExpense.budgetId, newExpense.categoryId)
+                    .update("spentAmount", FieldValue.increment(difference)).await()
+            }
 
             Result.success(Unit)
         } catch (e: Exception) {
