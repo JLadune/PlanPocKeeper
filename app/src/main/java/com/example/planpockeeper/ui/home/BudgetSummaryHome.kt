@@ -14,6 +14,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -21,6 +24,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.planpockeeper.data.model.Budget
 import com.example.planpockeeper.data.model.BudgetCategory
+import androidx.compose.ui.platform.LocalContext
+import com.example.planpockeeper.utils.CurrencyFormatter
+import com.example.planpockeeper.utils.PreferencesManager
 
 @Composable
 fun BudgetSummaryHome(
@@ -28,6 +34,10 @@ fun BudgetSummaryHome(
     budgetCategories: List<BudgetCategory>,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val prefsManager = remember { PreferencesManager(context) }
+    val currency by prefsManager.currency.collectAsState(initial = "EUR")
+
     Column(modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         if (activeBudget != null) {
             val periodicityLabel = when {
@@ -44,7 +54,11 @@ fun BudgetSummaryHome(
             }
             Row {
                 Text("Budget total : ", style = MaterialTheme.typography.bodyMedium)
-                Text("${activeBudget.totalAmount.toInt()}€", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    CurrencyFormatter.format(activeBudget.totalAmount, currency),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
             }
         } else {
             Text(
@@ -97,7 +111,7 @@ fun BudgetSummaryHome(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "${cat.spentAmount.toInt()}/${cat.plannedAmount.toInt()}€",
+                        "${CurrencyFormatter.format(cat.spentAmount, currency)} / ${CurrencyFormatter.format(cat.plannedAmount, currency)}",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold
                     )
