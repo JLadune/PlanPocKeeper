@@ -15,6 +15,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -22,11 +25,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
+import androidx.compose.ui.platform.LocalContext
+import com.example.planpockeeper.utils.CurrencyFormatter
+import com.example.planpockeeper.utils.PreferencesManager
+
 @Composable
 fun BudgetSummaryTable(
     categories: List<BudgetSummaryItem>,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val prefsManager = remember { PreferencesManager(context) }
+    val currency by prefsManager.currency.collectAsState(initial = "EUR")
 
     Column(modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         // Header
@@ -131,7 +141,7 @@ fun BudgetSummaryTable(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            "${if (isOver) "-" else "+"}${abs(diff).toInt()}€",
+                            "${if (isOver) "-" else "+"}${CurrencyFormatter.format(abs(diff), currency)}",
                             style = MaterialTheme.typography.labelSmall
                         )
                     }

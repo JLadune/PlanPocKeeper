@@ -12,9 +12,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import com.example.planpockeeper.utils.CurrencyFormatter
+import com.example.planpockeeper.utils.PreferencesManager
 
 @Composable
 fun BilanCard(
@@ -26,6 +32,11 @@ fun BilanCard(
     val isBudgetOver = totalSpent > totalPlanned
     val overCategories = categories.filter { it.spent > it.planned }
     val totalDiff = totalSpent - totalPlanned
+
+    val context = LocalContext.current
+    val prefsManager = remember { PreferencesManager(context) }
+    val currency by prefsManager.currency.collectAsState(initial = "EUR")
+
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row {
             Icon(
@@ -55,7 +66,7 @@ fun BilanCard(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                " sur le budget : ${if (isBudgetOver) "-" else "+"}${kotlin.math.abs(totalDiff).toInt()}€",
+                " sur le budget : ${if (isBudgetOver) "-" else "+"}${CurrencyFormatter.format(kotlin.math.abs(totalDiff), currency)}",
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
