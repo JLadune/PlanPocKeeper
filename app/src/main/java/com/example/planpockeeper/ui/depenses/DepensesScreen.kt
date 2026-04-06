@@ -42,6 +42,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,6 +68,9 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
+import com.example.planpockeeper.utils.CurrencyFormatter
+import com.example.planpockeeper.utils.PreferencesManager
 
 @Composable
 fun DepensesTheme(content: @Composable () -> Unit) {
@@ -142,6 +146,10 @@ private fun DepensesHomeContent(onAddExpense: () -> Unit) {
     val expenseRepository = remember { ExpenseRepository() }
     val scope = rememberCoroutineScope()
 
+    val context = LocalContext.current
+    val prefsManager = remember { PreferencesManager(context) }
+    val currency by prefsManager.currency.collectAsState(initial = "EUR")
+
     var activeBudget by remember { mutableStateOf<Budget?>(null) }
     var expenses by remember { mutableStateOf<List<Expense>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -178,7 +186,7 @@ private fun DepensesHomeContent(onAddExpense: () -> Unit) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("Depenses", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Total depense: ${formatAmount(totalSpent)} €")
+                    Text("Total depense: ${CurrencyFormatter.format(totalSpent, currency)}")
                     Text("Nombre de depenses: ${expenses.size}")
                 }
             }
