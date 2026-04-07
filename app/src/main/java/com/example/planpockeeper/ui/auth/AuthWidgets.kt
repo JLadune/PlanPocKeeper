@@ -18,21 +18,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 
-@Composable
-fun AuthHeader() {
-    Text("Test Firebase Auth")
-    Spacer(modifier = Modifier.height(12.dp))
-}
 
 @Composable
 fun ConnectedUserCard(
     email: String,
     onLogout: () -> Unit
 ) {
-    Text("Connecte: $email")
+    Text("Connecté: $email")
     Spacer(modifier = Modifier.height(8.dp))
     Button(onClick = onLogout) {
-        Text("Se deconnecter")
+        Text("Se déconnecter")
     }
 }
 
@@ -47,14 +42,14 @@ fun AuthModeSelector(
             enabled = selectedMode != AuthMode.SIGN_UP,
             modifier = Modifier.weight(1f)
         ) {
-            Text("Sign up")
+            Text("Inscription")
         }
         Button(
             onClick = { onModeChange(AuthMode.LOGIN) },
             enabled = selectedMode != AuthMode.LOGIN,
             modifier = Modifier.weight(1f)
         ) {
-            Text("Login")
+            Text("Connexion")
         }
     }
 }
@@ -71,7 +66,7 @@ fun SignUpFields(
         onValueChange = onNameChange,
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        label = { Text("Prenom") }
+        label = { Text("Prénom") }
     )
 
     Spacer(modifier = Modifier.height(8.dp))
@@ -120,7 +115,7 @@ fun AuthAction(
     onSubmit: () -> Unit
 ) {
     Button(enabled = !isLoading, onClick = onSubmit) {
-        Text(if (mode == AuthMode.SIGN_UP) "Creer un compte" else "Se connecter")
+        Text(if (mode == AuthMode.SIGN_UP) "Créer un compte" else "Se connecter")
     }
 
     if (isLoading) {
@@ -145,7 +140,9 @@ fun AuthForm(
     onSurnameChange: (String) -> Unit,
     onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
-    onSubmit: () -> Unit
+    onConfirmPasswordChange: (String) -> Unit,
+    onSubmit: () -> Unit,
+    onResendVerificationEmail: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         AuthModeSelector(selectedMode = state.mode, onModeChange = onModeChange)
@@ -168,9 +165,37 @@ fun AuthForm(
             onPasswordChange = onPasswordChange
         )
 
+        if (state.mode == AuthMode.SIGN_UP) {
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = state.confirmPassword,
+                onValueChange = onConfirmPasswordChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Confirmer le mot de passe") },
+                visualTransformation = PasswordVisualTransformation()
+            )
+        }
+
         Spacer(modifier = Modifier.height(12.dp))
 
         AuthAction(mode = state.mode, isLoading = state.isLoading, onSubmit = onSubmit)
+
+        val canResendVerification =
+            state.mode == AuthMode.LOGIN ||
+                (state.mode == AuthMode.SIGN_UP &&
+                    state.statusMessage == "Inscription réussie. Vérifie ton email puis connecte-toi.")
+
+        if (canResendVerification) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                enabled = !state.isLoading,
+                onClick = onResendVerificationEmail
+            ) {
+                Text("Renvoyer l'e-mail de vérification")
+            }
+        }
+
         StatusMessage(state.statusMessage)
     }
 }
