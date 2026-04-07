@@ -3,6 +3,8 @@ package com.example.planpockeeper.ui.budget
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.Canvas
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
@@ -20,8 +23,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -41,6 +48,20 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.roundToInt
+
+private val QUICK_CATEGORY_COLORS = listOf(
+    "#EF5350", "#EC407A", "#AB47BC", "#7E57C2", "#5C6BC0", "#42A5F5",
+    "#26C6DA", "#26A69A", "#66BB6A", "#9CCC65", "#D4E157", "#FFCA28",
+    "#FFA726", "#FF7043", "#8D6E63", "#78909C"
+)
+
+private val CATEGORY_PALETTES = listOf(
+    "Pastel" to listOf("#F8BBD0", "#E1BEE7", "#C5CAE9", "#B3E5FC", "#C8E6C9", "#FFF9C4"),
+    "Nature" to listOf("#2E7D32", "#558B2F", "#8BC34A", "#A1887F", "#6D4C41", "#4E342E"),
+    "Océan" to listOf("#01579B", "#0277BD", "#0288D1", "#039BE5", "#00ACC1", "#00838F"),
+    "Énergie" to listOf("#B71C1C", "#E53935", "#FB8C00", "#FDD835", "#7CB342", "#43A047")
+)
 
 // ─── Firestore helpers ────────────────────────────────────────────────────
 
@@ -843,11 +864,11 @@ fun CreateCategoryDialog(
     onDismiss: () -> Unit,
     onConfirm: (String, String) -> Unit
 ) {
-    val existingColors = existingCategories.map { it.color.trim().lowercase() }
+    val existingColors = existingCategories.map { it.color.trim().lowercase() }.toSet()
 
     var name by remember { mutableStateOf("") }
 
-    // Color picker state — hue slider + saturation/brightness sliders
+    // Visual picker state (HSV)
     var hue by remember { mutableStateOf(0f) }
     var saturation by remember { mutableStateOf(0.8f) }
     var brightness by remember { mutableStateOf(0.9f) }
@@ -855,9 +876,19 @@ fun CreateCategoryDialog(
     val pickedColor = Color.hsv(hue, saturation, brightness)
     val pickedHex = "#%06X".format(pickedColor.toArgb() and 0xFFFFFF)
 
+    fun applyHexSelection(hex: String) {
+        runCatching {
+            val hsv = FloatArray(3)
+            android.graphics.Color.colorToHSV(android.graphics.Color.parseColor(hex), hsv)
+            hue = hsv[0]
+            saturation = hsv[1]
+            brightness = hsv[2]
+        }
+    }
+
     val nameTaken = name.isNotBlank() &&
             existingCategories.any { it.name.trim().equals(name.trim(), ignoreCase = true) }
-    val colorTaken = existingColors.any { it == pickedHex.trim().lowercase() }
+    val colorTaken = existingColors.contains(pickedHex.trim().lowercase())
     val canConfirm = name.isNotBlank() && !nameTaken && !colorTaken
 
     Dialog(onDismissRequest = onDismiss) {
@@ -870,7 +901,6 @@ fun CreateCategoryDialog(
             ) {
                 Text("Nouvelle catégorie", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 
-                // Name field
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -882,7 +912,6 @@ fun CreateCategoryDialog(
                     } else null
                 )
 
-                // Color preview
                 Text("Couleur choisie", style = MaterialTheme.typography.labelMedium)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(
@@ -899,10 +928,34 @@ fun CreateCategoryDialog(
                     )
                 }
                 if (colorTaken) {
-                    Text("Cette couleur est déjà utilisée. Ajustez les curseurs.", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                    Text("Cette couleur est déjà utilisée. Choisis-en une autre.", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
                 }
 
-                // Hue slider
+                Text("Couleurs rapides", style = MaterialTheme.typography.labelMedium)
+                ColorSwatchRows(
+                    colors = QUICK_CATEGORY_COLORS,
+                    selectedHex = pickedHex,
+                    takenColors = existingColors,
+                    onSelect = ::applyHexSelection
+                )
+
+                Text("Palettes", style = MaterialTheme.typography.labelMedium)
+                CATEGORY_PALETTES.forEach { (paletteName, paletteColors) ->
+                    Text(
+                        paletteName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    ColorSwatchRows(
+                        colors = paletteColors,
+                        selectedHex = pickedHex,
+                        takenColors = existingColors,
+                        onSelect = ::applyHexSelection,
+                        swatchesPerRow = 6
+                    )
+                }
+
+                Text("Personnaliser", style = MaterialTheme.typography.labelMedium)
                 Text("Teinte", style = MaterialTheme.typography.labelSmall)
                 Slider(
                     value = hue,
@@ -911,38 +964,26 @@ fun CreateCategoryDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Saturation slider
-                Text("Saturation", style = MaterialTheme.typography.labelSmall)
-                Slider(
-                    value = saturation,
-                    onValueChange = { saturation = it },
-                    valueRange = 0f..1f,
-                    modifier = Modifier.fillMaxWidth()
+                SaturationBrightnessPicker(
+                    hue = hue,
+                    saturation = saturation,
+                    brightness = brightness,
+                    onColorChange = { sat, bri ->
+                        saturation = sat
+                        brightness = bri
+                    }
                 )
 
-                // Brightness slider
-                Text("Luminosité", style = MaterialTheme.typography.labelSmall)
-                Slider(
-                    value = brightness,
-                    onValueChange = { brightness = it },
-                    valueRange = 0f..1f,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                // Existing colors shown as taken
                 if (existingCategories.isNotEmpty()) {
                     Text("Couleurs déjà utilisées", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        existingCategories.forEach { cat ->
-                            Box(
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .clip(CircleShape)
-                                    .background(hexToComposeColor(cat.color))
-                                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                            )
-                        }
-                    }
+                    ColorSwatchRows(
+                        colors = existingCategories.map { it.color },
+                        selectedHex = pickedHex,
+                        takenColors = existingColors,
+                        onSelect = {},
+                        swatchesPerRow = 10,
+                        enabled = false
+                    )
                 }
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -950,8 +991,7 @@ fun CreateCategoryDialog(
                     Button(
                         onClick = {
                             if (!canConfirm) return@Button
-                            // If somehow colorTaken, assign random
-                            val finalColor = if (colorTaken) randomHexColor(existingColors) else pickedHex
+                            val finalColor = if (colorTaken) randomHexColor(existingColors.toList()) else pickedHex
                             onConfirm(name, finalColor)
                         },
                         enabled = canConfirm,
@@ -961,4 +1001,121 @@ fun CreateCategoryDialog(
             }
         }
     }
+}
+
+@Composable
+private fun ColorSwatchRows(
+    colors: List<String>,
+    selectedHex: String,
+    takenColors: Set<String>,
+    onSelect: (String) -> Unit,
+    swatchesPerRow: Int = 8,
+    enabled: Boolean = true
+) {
+    colors.chunked(swatchesPerRow).forEach { row ->
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            row.forEach { hex ->
+                val normalized = hex.trim().lowercase()
+                val isSelected = normalized == selectedHex.trim().lowercase()
+                val isTaken = takenColors.contains(normalized)
+
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(hexToComposeColor(hex))
+                        .border(
+                            width = if (isSelected) 3.dp else 1.dp,
+                            color = when {
+                                isSelected -> MaterialTheme.colorScheme.primary
+                                isTaken -> MaterialTheme.colorScheme.error
+                                else -> MaterialTheme.colorScheme.outline
+                            },
+                            shape = CircleShape
+                        )
+                        .let {
+                            if (enabled) {
+                                it.clickable { onSelect(hex) }
+                            } else {
+                                it
+                            }
+                        }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SaturationBrightnessPicker(
+    hue: Float,
+    saturation: Float,
+    brightness: Float,
+    onColorChange: (Float, Float) -> Unit
+) {
+    var pickerWidth by remember { mutableStateOf(1f) }
+    var pickerHeight by remember { mutableStateOf(1f) }
+
+    fun applyOffset(offset: Offset) {
+        val sat = (offset.x / pickerWidth).coerceIn(0f, 1f)
+        val bri = (1f - (offset.y / pickerHeight)).coerceIn(0f, 1f)
+        onColorChange(sat, bri)
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+            .onSizeChanged {
+                pickerWidth = it.width.toFloat().coerceAtLeast(1f)
+                pickerHeight = it.height.toFloat().coerceAtLeast(1f)
+            }
+            .pointerInput(hue) {
+                detectTapGestures { offset ->
+                    applyOffset(offset)
+                }
+            }
+            .pointerInput(hue) {
+                detectDragGestures { change, _ ->
+                    applyOffset(change.position)
+                }
+            }
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            drawRect(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(Color.White, Color.hsv(hue, 1f, 1f))
+                )
+            )
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(Color.Transparent, Color.Black)
+                )
+            )
+
+            val markerX = saturation * size.width
+            val markerY = (1f - brightness) * size.height
+
+            drawCircle(
+                color = Color.White,
+                radius = 10.dp.toPx(),
+                center = Offset(markerX, markerY),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx())
+            )
+            drawCircle(
+                color = Color.Black.copy(alpha = 0.6f),
+                radius = 12.dp.toPx(),
+                center = Offset(markerX, markerY),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+            )
+        }
+    }
+
+    Text(
+        text = "Saturation ${(saturation * 100).roundToInt()}% • Luminosité ${(brightness * 100).roundToInt()}%",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
 }
