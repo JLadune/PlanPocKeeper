@@ -22,9 +22,10 @@ import kotlinx.coroutines.launch
 fun AuthScreen(modifier: Modifier = Modifier) {
     val authRepository = remember { AuthRepository() }
     val scope = rememberCoroutineScope()
+    val initialConnectedEmail = authRepository.currentUser()?.takeIf { it.isEmailVerified }?.email
 
     var state by remember {
-        mutableStateOf(AuthUiState(connectedEmail = authRepository.currentUser()?.email))
+        mutableStateOf(AuthUiState(connectedEmail = initialConnectedEmail))
     }
 
     fun updateStatus(message: String?) {
@@ -62,15 +63,19 @@ fun AuthScreen(modifier: Modifier = Modifier) {
             }
 
             state = if (result.isSuccess) {
-                state.copy(
-                    connectedEmail = result.getOrNull()?.email,
-                    isLoading = false,
-                    statusMessage = if (state.mode == AuthMode.SIGN_UP) {
-                        "Inscription reussie."
-                    } else {
-                        "Connexion reussie."
-                    }
-                )
+                if (state.mode == AuthMode.SIGN_UP) {
+                    state.copy(
+                        connectedEmail = null,
+                        isLoading = false,
+                        statusMessage = "Inscription reussie. Verifie ton email puis connecte-toi."
+                    )
+                } else {
+                    state.copy(
+                        connectedEmail = result.getOrNull()?.email,
+                        isLoading = false,
+                        statusMessage = "Connexion reussie."
+                    )
+                }
             } else {
                 state.copy(
                     isLoading = false,
@@ -100,7 +105,7 @@ fun AuthScreen(modifier: Modifier = Modifier) {
             .padding(24.dp),
         verticalArrangement = Arrangement.Center
     ) {
-        AuthHeader()
+        
         AuthForm(
             state = state,
             onModeChange = { mode -> state = state.copy(mode = mode, statusMessage = null) },

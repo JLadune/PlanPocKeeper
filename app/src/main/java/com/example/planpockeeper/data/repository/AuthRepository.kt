@@ -15,6 +15,8 @@ class AuthRepository {
             val result = auth.createUserWithEmailAndPassword(email, password).await()
             val user = result.user!!
 
+            user.sendEmailVerification().await()
+
             Firebase.firestore
                 .collection("users")
                 .document(user.uid)
@@ -23,6 +25,8 @@ class AuthRepository {
                     "surname" to surname,
                     "email" to email
                 )).await()
+
+            auth.signOut()
 
             Result.success(user)
         } catch (e: Exception) {
@@ -34,7 +38,15 @@ class AuthRepository {
     suspend fun login(email: String, password: String): Result<FirebaseUser> {
         return try {
             val result = auth.signInWithEmailAndPassword(email, password).await()
-            Result.success(result.user!!)
+            val user = result.user!!
+            user.reload().await()
+
+            if (!user.isEmailVerified) {
+                auth.signOut()
+                Result.failure(Exception("Veuillez verifier votre email avant de vous connecter."))
+            } else {
+                Result.success(user)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }

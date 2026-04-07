@@ -18,11 +18,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 
-@Composable
-fun AuthHeader() {
-    Text("Test Firebase Auth")
-    Spacer(modifier = Modifier.height(12.dp))
-}
 
 @Composable
 fun ConnectedUserCard(
