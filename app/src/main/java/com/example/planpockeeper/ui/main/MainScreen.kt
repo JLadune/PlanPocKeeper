@@ -1,5 +1,10 @@
 package com.example.planpockeeper.ui.main
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -36,6 +41,65 @@ import com.example.planpockeeper.ui.home.HomeScreen
 import com.example.planpockeeper.ui.profile.InfosCompteScreen
 import com.example.planpockeeper.ui.profile.ParametresScreen
 
+private fun ConnectivityManager.isCurrentlyConnected(): Boolean {
+    val network = activeNetwork ?: return false
+    val capabilities = getNetworkCapabilities(network) ?: return false
+    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+}
+
+@Composable
+private fun rememberIsOnline(): Boolean {
+    val context = LocalContext.current
+    val connectivityManager = remember(context) {
+        context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    }
+
+    var isOnline by remember { mutableStateOf(connectivityManager.isCurrentlyConnected()) }
+
+    DisposableEffect(connectivityManager) {
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                isOnline = connectivityManager.isCurrentlyConnected()
+            }
+
+            override fun onLost(network: Network) {
+                isOnline = connectivityManager.isCurrentlyConnected()
+            }
+
+            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                isOnline = connectivityManager.isCurrentlyConnected()
+            }
+        }
+
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+
+        connectivityManager.registerNetworkCallback(request, callback)
+        onDispose {
+            runCatching { connectivityManager.unregisterNetworkCallback(callback) }
+        }
+    }
+
+    return isOnline
+}
+
+@Composable
+private fun OfflineBanner() {
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        tonalElevation = 2.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = "Mode hors ligne : certaines actions (Firebase) ne sont pas disponibles.",
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+        )
+    }
+}
+
 data class NavItem(
     val route: String,
     val label: String,
@@ -53,6 +117,7 @@ val navItems = listOf(
 @Composable
 fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
     val navController = rememberNavController()
+    val isOnline = rememberIsOnline()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
@@ -147,23 +212,29 @@ fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
                 }
             }
         ) { innerPadding ->
-            NavHost(
-                navController = navController,
-                startDestination = "accueil",
-                modifier = Modifier.padding(innerPadding)
-            ) {
-                composable("accueil")      { HomeScreen() }
-                composable("budget")       { BudgetScreen() }
-                composable("depenses")     { DepensesScreen() }
-                composable("analyse")      { AnalyseScreen() }
-                composable("infos_compte") {
-                    InfosCompteScreen(
-                        onBack = { navController.popBackStack() },
-                        onAccountDeleted = { onLogout() },
-                        onEmailChangeRequiresLogout = { onLogout() }
-                    )
+            Column(modifier = Modifier.padding(innerPadding)) {
+                if (!isOnline) {
+                    OfflineBanner()
                 }
-                composable("parametres")   { ParametresScreen(onBack = { navController.popBackStack() }) }
+
+                NavHost(
+                    navController = navController,
+                    startDestination = "accueil",
+                    modifier = Modifier.weight(1f)
+                ) {
+                    composable("accueil")      { HomeScreen() }
+                    composable("budget")       { BudgetScreen() }
+                    composable("depenses")     { DepensesScreen() }
+                    composable("analyse")      { AnalyseScreen() }
+                    composable("infos_compte") {
+                        InfosCompteScreen(
+                            onBack = { navController.popBackStack() },
+                            onAccountDeleted = { onLogout() },
+                            onEmailChangeRequiresLogout = { onLogout() }
+                        )
+                    }
+                    composable("parametres")   { ParametresScreen(onBack = { navController.popBackStack() }) }
+                }
             }
         }
 
