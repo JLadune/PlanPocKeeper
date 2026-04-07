@@ -1,9 +1,13 @@
 package com.example.planpockeeper.ui.auth
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -14,7 +18,13 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -134,6 +144,44 @@ fun StatusMessage(message: String?) {
 }
 
 @Composable
+private fun GoogleBrandedButton(
+    text: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val siwgResId = remember(context) {
+        context.resources.getIdentifier("siwg_button", "drawable", context.packageName)
+    }
+
+    if (siwgResId != 0) {
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(id = siwgResId),
+                contentDescription = text,
+                contentScale = ContentScale.Fit,
+                colorFilter = if (enabled) null else ColorFilter.tint(androidx.compose.ui.graphics.Color(0x66000000)),
+                modifier = Modifier
+                    .height(52.dp)
+                    .widthIn(max = 460.dp)
+                    .clickable(enabled = enabled, onClick = onClick)
+            )
+        }
+    } else {
+        OutlinedButton(
+            enabled = enabled,
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(text)
+        }
+    }
+}
+
+@Composable
 fun AuthForm(
     state: AuthUiState,
     onModeChange: (AuthMode) -> Unit,
@@ -183,16 +231,12 @@ fun AuthForm(
 
         AuthAction(mode = state.mode, isLoading = state.isLoading, onSubmit = onSubmit)
 
-        if (state.mode == AuthMode.LOGIN) {
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedButton(
-                enabled = !state.isLoading,
-                onClick = onGoogleSignIn,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Continuer avec Google")
-            }
-        }
+        Spacer(modifier = Modifier.height(8.dp))
+        GoogleBrandedButton(
+            text = if (state.mode == AuthMode.SIGN_UP) "Sign in with Google" else "Sign in with Google",
+            enabled = !state.isLoading,
+            onClick = onGoogleSignIn
+        )
 
         val canResendVerification =
             state.mode == AuthMode.LOGIN ||
