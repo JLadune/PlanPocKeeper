@@ -20,6 +20,33 @@ import kotlinx.coroutines.launch
 
 private const val ALLOWED_SPECIAL_CHARACTERS = "!@#$%^&*()_+-=[]{}|;:',.<>?/"
 
+private fun mapAuthErrorMessage(rawMessage: String?): String {
+    val fallback = "Une erreur est survenue."
+    val message = rawMessage?.trim()?.lowercase() ?: return fallback
+
+    return when {
+        "password is invalid" in message ||
+            "invalid login credentials" in message ||
+            "there is no user record" in message ||
+            "credential is incorrect" in message ||
+            "credential is incorect" in message ||
+            "invalid credential" in message -> "E-mail ou mot de passe incorrect."
+
+        "email address is badly formatted" in message ||
+            "badly formatted" in message -> "Le format de l'e-mail est invalide."
+
+        "email address is already in use" in message ||
+            "already in use" in message -> "Cette adresse e-mail est déjà utilisée."
+
+        "too many requests" in message -> "Trop de tentatives. Réessaie dans quelques instants."
+
+        "network" in message ||
+            "timeout" in message -> "Problème réseau. Vérifie ta connexion Internet puis réessaie."
+
+        else -> rawMessage ?: fallback
+    }
+}
+
 private fun signUpPasswordError(password: String): String? {
     if (password.length < 8) {
         return "Le mot de passe doit contenir au moins 8 caractères."
@@ -119,7 +146,7 @@ fun AuthScreen(modifier: Modifier = Modifier) {
             } else {
                 state.copy(
                     isLoading = false,
-                    statusMessage = result.exceptionOrNull()?.localizedMessage ?: "Erreur inconnue."
+                    statusMessage = mapAuthErrorMessage(result.exceptionOrNull()?.localizedMessage)
                 )
             }
         }
@@ -146,7 +173,7 @@ fun AuthScreen(modifier: Modifier = Modifier) {
             } else {
                 state.copy(
                     isLoading = false,
-                    statusMessage = result.exceptionOrNull()?.localizedMessage ?: "Erreur inconnue."
+                    statusMessage = mapAuthErrorMessage(result.exceptionOrNull()?.localizedMessage)
                 )
             }
         }
