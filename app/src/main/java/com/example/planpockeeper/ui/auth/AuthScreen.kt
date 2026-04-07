@@ -1,5 +1,7 @@
 package com.example.planpockeeper.ui.auth
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -13,9 +15,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.planpockeeper.data.repository.AuthRepository
 import com.example.planpockeeper.ui.main.MainScreen
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
 import kotlinx.coroutines.launch
 
 private const val ALLOWED_SPECIAL_CHARACTERS = "!@#$%^&*()_+-=[]{}|;:',.<>?/"
@@ -39,6 +46,9 @@ private fun mapAuthErrorMessage(rawMessage: String?): String {
             "already in use" in message -> "Cette adresse e-mail est déjà utilisée."
 
         "too many requests" in message -> "Trop de tentatives. Réessaie dans quelques instants."
+
+        "canceled" in message ||
+            "cancelled" in message -> "Connexion Google annulée."
 
         "network" in message ||
             "timeout" in message -> "Problème réseau. Vérifie ta connexion Internet puis réessaie."
@@ -68,6 +78,7 @@ private fun signUpPasswordError(password: String): String? {
 
 @Composable
 fun AuthScreen(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
     val authRepository = remember { AuthRepository() }
     val scope = rememberCoroutineScope()
     val initialConnectedEmail = authRepository.currentUser()?.takeIf { it.isEmailVerified }?.email
@@ -78,6 +89,63 @@ fun AuthScreen(modifier: Modifier = Modifier) {
 
     fun updateStatus(message: String?) {
         state = state.copy(statusMessage = message)
+    }
+
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val data = result.data
+        val task = GoogleSignIn.getSignedInAccountFromIntent(data)
+
+        try {
+            val account = task.getResult(ApiException::class.java)
+            val idToken = account.idToken
+
+            if (idToken.isNullOrBlank()) {
+                updateStatus("Impossible de récupérer le jeton Google.")
+                return@rememberLauncherForActivityResult
+            }
+
+            scope.launch {
+                state = state.copy(isLoading = true, statusMessage = null)
+                val loginResult = authRepository.loginWithGoogleIdToken(idToken)
+                state = if (loginResult.isSuccess) {
+                    state.copy(
+                        connectedEmail = loginResult.getOrNull()?.email,
+                        isLoading = false,
+                        statusMessage = "Connexion Google réussie."
+                    )
+                } else {
+                    state.copy(
+                        isLoading = false,
+                        statusMessage = mapAuthErrorMessage(loginResult.exceptionOrNull()?.localizedMessage)
+                    )
+                }
+            }
+        } catch (e: ApiException) {
+            updateStatus(mapAuthErrorMessage(e.localizedMessage))
+        }
+    }
+
+    fun loginWithGoogle() {
+        val webClientIdRes = context.resources.getIdentifier(
+            "default_web_client_id",
+            "string",
+            context.packageName
+        )
+        if (webClientIdRes == 0) {
+            updateStatus("Client Google non configuré. Vérifie Firebase et google-services.json.")
+            return
+        }
+
+        val webClientId = context.getString(webClientIdRes)
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken(webClientId)
+            .requestEmail()
+            .build()
+
+        val client = GoogleSignIn.getClient(context, gso)
+        googleSignInLauncher.launch(client.signInIntent)
     }
 
     fun submitAuth() {
@@ -215,7 +283,8 @@ fun AuthScreen(modifier: Modifier = Modifier) {
             onPasswordChange = { value -> state = state.copy(password = value) },
             onConfirmPasswordChange = { value -> state = state.copy(confirmPassword = value) },
             onSubmit = ::submitAuth,
-            onResendVerificationEmail = ::resendVerificationEmail
+            onResendVerificationEmail = ::resendVerificationEmail,
+            onGoogleSignIn = ::loginWithGoogle
         )
         Spacer(modifier = Modifier.height(4.dp))
     }

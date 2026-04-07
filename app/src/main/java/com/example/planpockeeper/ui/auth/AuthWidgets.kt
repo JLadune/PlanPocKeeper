@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -142,7 +143,8 @@ fun AuthForm(
     onPasswordChange: (String) -> Unit,
     onConfirmPasswordChange: (String) -> Unit,
     onSubmit: () -> Unit,
-    onResendVerificationEmail: () -> Unit
+    onResendVerificationEmail: () -> Unit,
+    onGoogleSignIn: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         AuthModeSelector(selectedMode = state.mode, onModeChange = onModeChange)
@@ -180,6 +182,17 @@ fun AuthForm(
         Spacer(modifier = Modifier.height(12.dp))
 
         AuthAction(mode = state.mode, isLoading = state.isLoading, onSubmit = onSubmit)
+
+        if (state.mode == AuthMode.LOGIN) {
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(
+                enabled = !state.isLoading,
+                onClick = onGoogleSignIn,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Continuer avec Google")
+            }
+        }
 
         val canResendVerification =
             state.mode == AuthMode.LOGIN ||
