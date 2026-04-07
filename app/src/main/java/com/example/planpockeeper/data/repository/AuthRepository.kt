@@ -43,7 +43,7 @@ class AuthRepository {
 
             if (!user.isEmailVerified) {
                 auth.signOut()
-                Result.failure(Exception("Veuillez vérifier votre email avant de vous connecter."))
+                Result.failure(Exception("Veuillez vérifier votre e-mail avant de vous connecter."))
             } else {
                 Result.success(user)
             }
@@ -60,7 +60,7 @@ class AuthRepository {
 
             if (user.isEmailVerified) {
                 auth.signOut()
-                Result.failure(Exception("Cet email est déjà vérifié."))
+                Result.failure(Exception("Cet e-mail est déjà vérifié."))
             } else {
                 user.sendEmailVerification().await()
                 auth.signOut()

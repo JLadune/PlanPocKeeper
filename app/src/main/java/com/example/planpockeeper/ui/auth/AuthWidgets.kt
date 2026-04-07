@@ -42,14 +42,14 @@ fun AuthModeSelector(
             enabled = selectedMode != AuthMode.SIGN_UP,
             modifier = Modifier.weight(1f)
         ) {
-            Text("Sign up")
+            Text("Inscription")
         }
         Button(
             onClick = { onModeChange(AuthMode.LOGIN) },
             enabled = selectedMode != AuthMode.LOGIN,
             modifier = Modifier.weight(1f)
         ) {
-            Text("Login")
+            Text("Connexion")
         }
     }
 }
@@ -192,7 +192,7 @@ fun AuthForm(
                 enabled = !state.isLoading,
                 onClick = onResendVerificationEmail
             ) {
-                Text("Renvoyer l'email de vérification")
+                Text("Renvoyer l'e-mail de vérification")
             }
         }
 

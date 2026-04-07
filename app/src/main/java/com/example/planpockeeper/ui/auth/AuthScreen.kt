@@ -18,6 +18,27 @@ import com.example.planpockeeper.data.repository.AuthRepository
 import com.example.planpockeeper.ui.main.MainScreen
 import kotlinx.coroutines.launch
 
+private const val ALLOWED_SPECIAL_CHARACTERS = "!@#$%^&*()_+-=[]{}|;:',.<>?/"
+
+private fun signUpPasswordError(password: String): String? {
+    if (password.length < 8) {
+        return "Le mot de passe doit contenir au moins 8 caractères."
+    }
+    if (password.none { it.isDigit() }) {
+        return "Le mot de passe doit contenir au moins un nombre."
+    }
+    if (password.none { it.isLowerCase() }) {
+        return "Le mot de passe doit contenir au moins une lettre minuscule."
+    }
+    if (password.none { it.isUpperCase() }) {
+        return "Le mot de passe doit contenir au moins une lettre majuscule."
+    }
+    if (password.none { it in ALLOWED_SPECIAL_CHARACTERS }) {
+        return "Le mot de passe doit contenir au moins un caractère spécial parmi : $ALLOWED_SPECIAL_CHARACTERS"
+    }
+    return null
+}
+
 @Composable
 fun AuthScreen(modifier: Modifier = Modifier) {
     val authRepository = remember { AuthRepository() }
@@ -62,6 +83,15 @@ fun AuthScreen(modifier: Modifier = Modifier) {
                     return@launch
                 }
 
+                val passwordError = signUpPasswordError(cleanedPassword)
+                if (passwordError != null) {
+                    state = state.copy(
+                        isLoading = false,
+                        statusMessage = passwordError
+                    )
+                    return@launch
+                }
+
                 authRepository.register(
                     email = cleanedEmail,
                     password = cleanedPassword,
@@ -100,7 +130,7 @@ fun AuthScreen(modifier: Modifier = Modifier) {
         val cleanedPassword = state.password.trim()
 
         if (cleanedEmail.isBlank() || cleanedPassword.isBlank()) {
-            updateStatus("Saisis email et mot de passe pour renvoyer le mail de vérification.")
+            updateStatus("Saisis un e-mail et un mot de passe pour renvoyer l'e-mail de vérification.")
             return
         }
 
