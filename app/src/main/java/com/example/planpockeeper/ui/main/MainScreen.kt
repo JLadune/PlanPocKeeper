@@ -156,7 +156,13 @@ fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
                 composable("budget")       { BudgetScreen() }
                 composable("depenses")     { DepensesScreen() }
                 composable("analyse")      { AnalyseScreen() }
-                composable("infos_compte") { InfosCompteScreen(onBack = { navController.popBackStack() }) }
+                composable("infos_compte") {
+                    InfosCompteScreen(
+                        onBack = { navController.popBackStack() },
+                        onAccountDeleted = { onLogout() },
+                        onEmailChangeRequiresLogout = { onLogout() }
+                    )
+                }
                 composable("parametres")   { ParametresScreen(onBack = { navController.popBackStack() }) }
             }
         }

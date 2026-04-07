@@ -1,6 +1,7 @@
 package com.example.planpockeeper.data.repository
 
 import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
@@ -66,6 +67,55 @@ class AuthRepository {
                 auth.signOut()
                 Result.success(Unit)
             }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun sendPasswordResetForCurrentUser(): Result<Unit> {
+        return try {
+            val email = auth.currentUser?.email
+                ?: return Result.failure(Exception("Aucun e-mail utilisateur n'a été trouvé."))
+            auth.sendPasswordResetEmail(email).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun requestEmailChange(newEmail: String, currentPassword: String): Result<Unit> {
+        return try {
+            val user = auth.currentUser ?: return Result.failure(Exception("Utilisateur non connecté."))
+            val currentEmail = user.email
+                ?: return Result.failure(Exception("Aucun e-mail actuel n'est disponible."))
+
+            val credential = EmailAuthProvider.getCredential(currentEmail, currentPassword)
+            user.reauthenticate(credential).await()
+            user.verifyBeforeUpdateEmail(newEmail).await()
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteCurrentAccount(currentPassword: String): Result<Unit> {
+        return try {
+            val user = auth.currentUser ?: return Result.failure(Exception("Utilisateur non connecté."))
+            val currentEmail = user.email
+                ?: return Result.failure(Exception("Aucun e-mail actuel n'est disponible."))
+
+            val credential = EmailAuthProvider.getCredential(currentEmail, currentPassword)
+            user.reauthenticate(credential).await()
+
+            Firebase.firestore
+                .collection("users")
+                .document(user.uid)
+                .delete().await()
+
+            user.delete().await()
+            auth.signOut()
+            Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }
