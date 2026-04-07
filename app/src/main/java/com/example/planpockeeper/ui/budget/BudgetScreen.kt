@@ -6,9 +6,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
@@ -19,6 +21,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -27,6 +31,9 @@ import androidx.compose.ui.window.Dialog
 import com.example.planpockeeper.data.model.Budget
 import com.example.planpockeeper.data.model.BudgetCategory
 import com.example.planpockeeper.data.model.Category
+import com.example.planpockeeper.utils.CurrencyFormatter
+import com.example.planpockeeper.utils.PreferencesManager
+import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.firestore
@@ -34,37 +41,47 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import com.google.firebase.Firebase
-import androidx.compose.ui.platform.LocalContext
-import com.example.planpockeeper.utils.CurrencyFormatter
-import com.example.planpockeeper.utils.PreferencesManager
 
-// ─── Direct Firestore helpers (no repository layer) ──────────────────────
+// ─── Firestore helpers ────────────────────────────────────────────────────
 
 private fun userId() = Firebase.auth.currentUser?.uid
     ?: throw IllegalStateException("User not logged in")
 
 private fun budgetCol() = Firebase.firestore
-    .collection("users").document(userId())
-    .collection("budget")
+    .collection("users").document(userId()).collection("budget")
 
 private fun categoryCol() = Firebase.firestore
-    .collection("users").document(userId())
-    .collection("categories")
+    .collection("users").document(userId()).collection("categories")
 
 private fun budgetCategoryCol(budgetId: String) = Firebase.firestore
     .collection("users").document(userId())
     .collection("budget").document(budgetId)
     .collection("budgetCategories")
 
+// ─── Color helpers ────────────────────────────────────────────────────────
+
+private fun randomHexColor(excludedHexes: List<String>): String {
+    val rng = Random()
+    var hex: String
+    do {
+        val color = Color(
+            red = rng.nextFloat(),
+            green = rng.nextFloat(),
+            blue = rng.nextFloat()
+        )
+        hex = "#%06X".format(color.toArgb() and 0xFFFFFF)
+    } while (excludedHexes.any { it.trim().equals(hex.trim(), ignoreCase = true) })
+    return hex
+}
+
+private fun hexToComposeColor(hex: String): Color =
+    runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrElse { Color.Gray }
+
 // ─── Screen ───────────────────────────────────────────────────────────────
 
 @Composable
 fun BudgetScreen() {
     val scope = rememberCoroutineScope()
-
     val context = LocalContext.current
     val prefsManager = remember { PreferencesManager(context) }
     val currency by prefsManager.currency.collectAsState(initial = "EUR")
@@ -79,51 +96,34 @@ fun BudgetScreen() {
     var showAddCustomCategoryDialog by remember { mutableStateOf(false) }
     var editingBudgetCategory by remember { mutableStateOf<BudgetCategory?>(null) }
 
-    // Load active budget once
     LaunchedEffect(Unit) {
         try {
-            val snapshot = budgetCol()
-                .whereEqualTo("active", true)
-                .get().await()
-            val budget = snapshot.documents.firstOrNull()?.toObject(Budget::class.java)
-            activeBudget = budget
-        } catch (e: Exception) {
-            // not logged in yet or no budget
-        }
+            val snapshot = budgetCol().whereEqualTo("active", true).get().await()
+            activeBudget = snapshot.documents.firstOrNull()?.toObject(Budget::class.java)
+        } catch (e: Exception) { /* ignore */ }
         isLoading = false
     }
 
-    // Load categories for the budget whenever budget changes
     LaunchedEffect(activeBudget?.id) {
         val id = activeBudget?.id ?: return@LaunchedEffect
         try {
-            val snapshot = budgetCategoryCol(id)
-                .whereGreaterThan("plannedAmount", 0.0)
-                .get().await()
-            budgetCategories = snapshot.documents.mapNotNull {
-                it.toObject(BudgetCategory::class.java)
-            }
+            val snapshot = budgetCategoryCol(id).whereGreaterThan("plannedAmount", 0.0).get().await()
+            budgetCategories = snapshot.documents.mapNotNull { it.toObject(BudgetCategory::class.java) }
         } catch (e: Exception) { /* ignore */ }
     }
 
-    // Load available categories
     LaunchedEffect(Unit) {
         try {
             val snapshot = categoryCol().get().await()
-            availableCategories = snapshot.documents.mapNotNull {
-                it.toObject(Category::class.java)
-            }
+            availableCategories = snapshot.documents.mapNotNull { it.toObject(Category::class.java) }
         } catch (e: Exception) { /* ignore */ }
     }
 
     fun refreshBudget() {
         scope.launch {
             try {
-                val snapshot = budgetCol()
-                    .whereEqualTo("active", true)
-                    .get().await()
-                activeBudget = snapshot.documents.firstOrNull()
-                    ?.toObject(Budget::class.java)
+                val snapshot = budgetCol().whereEqualTo("active", true).get().await()
+                activeBudget = snapshot.documents.firstOrNull()?.toObject(Budget::class.java)
             } catch (e: Exception) { /* ignore */ }
         }
     }
@@ -132,12 +132,8 @@ fun BudgetScreen() {
         val id = activeBudget?.id ?: return
         scope.launch {
             try {
-                val snapshot = budgetCategoryCol(id)
-                    .whereGreaterThan("plannedAmount", 0.0)
-                    .get().await()
-                budgetCategories = snapshot.documents.mapNotNull {
-                    it.toObject(BudgetCategory::class.java)
-                }
+                val snapshot = budgetCategoryCol(id).whereGreaterThan("plannedAmount", 0.0).get().await()
+                budgetCategories = snapshot.documents.mapNotNull { it.toObject(BudgetCategory::class.java) }
             } catch (e: Exception) { /* ignore */ }
         }
     }
@@ -146,9 +142,7 @@ fun BudgetScreen() {
         scope.launch {
             try {
                 val snapshot = categoryCol().get().await()
-                availableCategories = snapshot.documents.mapNotNull {
-                    it.toObject(Category::class.java)
-                }
+                availableCategories = snapshot.documents.mapNotNull { it.toObject(Category::class.java) }
             } catch (e: Exception) { /* ignore */ }
         }
     }
@@ -167,7 +161,7 @@ fun BudgetScreen() {
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // ── Budget total card ──
+        // ── Budget card ──
         item {
             Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Column(
@@ -179,28 +173,16 @@ fun BudgetScreen() {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            "Budget total",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text("Budget total", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         if (activeBudget != null) {
                             Row {
-                                IconButton(
-                                    onClick = { showCreateDialog = true },
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Outlined.Edit,
-                                        contentDescription = "Modifier",
-                                        modifier = Modifier.size(18.dp)
-                                    )
+                                IconButton(onClick = { showCreateDialog = true }, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Outlined.Edit, contentDescription = "Modifier", modifier = Modifier.size(18.dp))
                                 }
                                 IconButton(
                                     onClick = {
                                         scope.launch {
                                             try {
-                                                // delete subcollections then doc
                                                 val cats = budgetCategoryCol(activeBudget!!.id).get().await()
                                                 cats.documents.forEach { it.reference.delete().await() }
                                                 budgetCol().document(activeBudget!!.id).delete().await()
@@ -211,21 +193,14 @@ fun BudgetScreen() {
                                     },
                                     modifier = Modifier.size(32.dp)
                                 ) {
-                                    Icon(
-                                        Icons.Outlined.Delete,
-                                        contentDescription = "Supprimer",
-                                        modifier = Modifier.size(18.dp)
-                                    )
+                                    Icon(Icons.Outlined.Delete, contentDescription = "Supprimer", modifier = Modifier.size(18.dp))
                                 }
                             }
                         }
                     }
 
                     Text(
-                        text = CurrencyFormatter.format(
-                            activeBudget?.totalAmount ?: 0.0,
-                            currency
-                        ),
+                        text = CurrencyFormatter.format(activeBudget?.totalAmount ?: 0.0, currency),
                         fontSize = 48.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
@@ -238,29 +213,17 @@ fun BudgetScreen() {
                             !budget.periodical && budget.endDate != null ->
                                 "Fin le ${dateFormat.format(budget.endDate.toDate())}"
                             budget.periodicity.startsWith("custom_") -> {
-                                val days = budget.periodicity
-                                    .removePrefix("custom_").removeSuffix("j")
+                                val days = budget.periodicity.removePrefix("custom_").removeSuffix("j")
                                 "Tous les $days jours"
                             }
                             else -> "Périodicité : ${budget.periodicity.replaceFirstChar { it.uppercase() }}"
                         }
                         if (budget.description.isNotBlank()) {
-                            Text(
-                                budget.description,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Text(budget.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Text(
-                            periodicityLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Text(periodicityLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         HorizontalDivider()
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Column {
                                 Text("Dépensé", style = MaterialTheme.typography.labelSmall)
                                 Text(CurrencyFormatter.format(totalSpent, currency), fontWeight = FontWeight.SemiBold)
@@ -270,47 +233,32 @@ fun BudgetScreen() {
                                 Text(
                                     CurrencyFormatter.format(remaining, currency),
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (remaining < 0) MaterialTheme.colorScheme.error
-                                    else MaterialTheme.colorScheme.primary
+                                    color = if (remaining < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                                 )
                             }
                         }
                         val progress = if (budget.totalAmount > 0)
-                            (totalSpent / budget.totalAmount).toFloat().coerceIn(0f, 1f)
-                        else 0f
+                            (totalSpent / budget.totalAmount).toFloat().coerceIn(0f, 1f) else 0f
                         LinearProgressIndicator(
                             progress = { progress },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp)),
-                            color = if (progress > 0.9f) MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.primary
+                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                            color = if (progress > 0.9f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                         )
                     }
                 }
             }
         }
 
-        // ── Permanent action buttons ──
+        // ── Action buttons ──
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = { showCreateDialog = true },
-                    modifier = Modifier.weight(1f)
-                ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { showCreateDialog = true }, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(if (activeBudget == null) "Créer un budget" else "Modifier le budget")
                 }
                 Button(
-                    onClick = {
-                        refreshAvailableCategories()
-                        showAddCategoryDialog = true
-                    },
+                    onClick = { refreshAvailableCategories(); showAddCategoryDialog = true },
                     modifier = Modifier.weight(1f),
                     enabled = activeBudget != null
                 ) {
@@ -323,20 +271,13 @@ fun BudgetScreen() {
 
         // ── Categories header ──
         item {
-            Text(
-                "Catégories",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
+            Text("Catégories", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         }
 
         if (budgetCategories.isEmpty()) {
             item {
                 Text(
-                    if (activeBudget == null)
-                        "Créez d'abord un budget"
-                    else
-                        "Aucune catégorie pour l'instant",
+                    if (activeBudget == null) "Créez d'abord un budget" else "Aucune catégorie pour l'instant",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -346,18 +287,13 @@ fun BudgetScreen() {
         // ── Category rows ──
         items(budgetCategories, key = { it.id }) { cat ->
             val catRemaining = cat.plannedAmount - cat.spentAmount
-            val catColor = runCatching {
-                Color(android.graphics.Color.parseColor(cat.color))
-            }.getOrElse { MaterialTheme.colorScheme.primary }
-
+            val catColor = hexToComposeColor(cat.color)
             Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                 Row(
                     modifier = Modifier.padding(12.dp).fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier.size(12.dp).clip(CircleShape).background(catColor)
-                    )
+                    Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(catColor))
                     Spacer(modifier = Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(cat.categoryName, fontWeight = FontWeight.SemiBold)
@@ -369,38 +305,24 @@ fun BudgetScreen() {
                         Text(
                             "Restant : ${CurrencyFormatter.format(catRemaining, currency)}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (catRemaining < 0) MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.primary
+                            color = if (catRemaining < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                         )
                     }
-                    IconButton(
-                        onClick = { editingBudgetCategory = cat },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            Icons.Outlined.Edit,
-                            contentDescription = "Modifier",
-                            modifier = Modifier.size(18.dp)
-                        )
+                    IconButton(onClick = { editingBudgetCategory = cat }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Outlined.Edit, contentDescription = "Modifier", modifier = Modifier.size(18.dp))
                     }
                     IconButton(
                         onClick = {
                             scope.launch {
                                 try {
-                                    budgetCategoryCol(activeBudget!!.id)
-                                        .document(cat.id)
-                                        .update("plannedAmount", 0.0).await()
+                                    budgetCategoryCol(activeBudget!!.id).document(cat.id).update("plannedAmount", 0.0).await()
                                     refreshCategories()
                                 } catch (e: Exception) { /* ignore */ }
                             }
                         },
                         modifier = Modifier.size(32.dp)
                     ) {
-                        Icon(
-                            Icons.Outlined.Delete,
-                            contentDescription = "Supprimer",
-                            modifier = Modifier.size(18.dp)
-                        )
+                        Icon(Icons.Outlined.Delete, contentDescription = "Supprimer", modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -426,7 +348,7 @@ fun BudgetScreen() {
                     try {
                         if (activeBudget == null) {
                             val ref = budgetCol().document()
-                            val budget = Budget(
+                            ref.set(Budget(
                                 id = ref.id,
                                 totalAmount = amount,
                                 description = desc,
@@ -435,8 +357,7 @@ fun BudgetScreen() {
                                 periodicity = resolvedPeriodicity,
                                 endDate = if (end != null) Timestamp(end) else null,
                                 active = true
-                            )
-                            ref.set(budget).await()
+                            )).await()
                         } else {
                             val updated = activeBudget!!.copy(
                                 totalAmount = amount,
@@ -467,14 +388,13 @@ fun BudgetScreen() {
                 scope.launch {
                     try {
                         val ref = budgetCategoryCol(activeBudget!!.id).document()
-                        val budgetCategory = BudgetCategory(
+                        ref.set(BudgetCategory(
                             id = ref.id,
                             categoryId = category.id,
                             categoryName = category.name,
                             plannedAmount = amount,
                             color = category.color
-                        )
-                        ref.set(budgetCategory).await()
+                        )).await()
                         refreshCategories()
                     } catch (e: Exception) { /* ignore */ }
                 }
@@ -483,6 +403,14 @@ fun BudgetScreen() {
             onCreateNew = {
                 showAddCategoryDialog = false
                 showAddCustomCategoryDialog = true
+            },
+            onDeleteCategory = { category ->
+                scope.launch {
+                    try {
+                        categoryCol().document(category.id).delete().await()
+                        refreshAvailableCategories()
+                    } catch (e: Exception) { /* ignore */ }
+                }
             }
         )
     }
@@ -495,8 +423,7 @@ fun BudgetScreen() {
                 scope.launch {
                     try {
                         val ref = categoryCol().document()
-                        val category = Category(id = ref.id, name = name, color = color)
-                        ref.set(category).await()
+                        ref.set(Category(id = ref.id, name = name, color = color)).await()
                         refreshAvailableCategories()
                     } catch (e: Exception) { /* ignore */ }
                 }
@@ -509,18 +436,14 @@ fun BudgetScreen() {
     editingBudgetCategory?.let { cat ->
         EditBudgetCategoryDialog(
             budgetCategory = cat,
-            budgetTotal = activeBudget?.totalAmount ?: 0.0,                                       // ← nouveau
-            currentCategoriesTotal = budgetCategories                                              // ← nouveau
-                .filter { it.id != cat.id }
-                .sumOf { it.plannedAmount },
+            budgetTotal = activeBudget?.totalAmount ?: 0.0,
+            currentCategoriesTotal = budgetCategories.filter { it.id != cat.id }.sumOf { it.plannedAmount },
             currency = currency,
             onDismiss = { editingBudgetCategory = null },
             onConfirm = { newAmount ->
                 scope.launch {
                     try {
-                        budgetCategoryCol(activeBudget!!.id)
-                            .document(cat.id)
-                            .update("plannedAmount", newAmount).await()
+                        budgetCategoryCol(activeBudget!!.id).document(cat.id).update("plannedAmount", newAmount).await()
                         refreshCategories()
                     } catch (e: Exception) { /* ignore */ }
                 }
@@ -545,13 +468,9 @@ fun CreateBudgetDialog(
     var periodical by remember { mutableStateOf(existing?.periodical ?: true) }
     val existingPeriod = existing?.periodicity ?: "mensuel"
     val isExistingCustom = existingPeriod.startsWith("custom_")
-    var periodicity by remember {
-        mutableStateOf(if (isExistingCustom) "custom" else existingPeriod)
-    }
+    var periodicity by remember { mutableStateOf(if (isExistingCustom) "custom" else existingPeriod) }
     var customDays by remember {
-        mutableStateOf(
-            if (isExistingCustom) existingPeriod.removePrefix("custom_").removeSuffix("j") else ""
-        )
+        mutableStateOf(if (isExistingCustom) existingPeriod.removePrefix("custom_").removeSuffix("j") else "")
     }
     var showPeriodicityMenu by remember { mutableStateOf(false) }
     val periodicities = listOf("hebdomadaire", "mensuel", "annuel", "custom")
@@ -561,9 +480,15 @@ fun CreateBudgetDialog(
     var showStartPicker by remember { mutableStateOf(false) }
     var showEndPicker by remember { mutableStateOf(false) }
     val startPickerState = rememberDatePickerState(initialSelectedDateMillis = startDate.time)
-    val endPickerState = rememberDatePickerState(
-        initialSelectedDateMillis = endDate?.time ?: System.currentTimeMillis()
-    )
+    val endPickerState = rememberDatePickerState(initialSelectedDateMillis = endDate?.time ?: System.currentTimeMillis())
+
+    // ── Validation ──
+    var submitAttempted by remember { mutableStateOf(false) }
+    val amountError = if (submitAttempted && amount.toDoubleOrNull() == null) "Montant invalide" else null
+    val amountZeroError = if (submitAttempted && (amount.toDoubleOrNull() ?: 0.0) <= 0.0) "Le montant doit être supérieur à 0" else null
+    val customDaysError = if (submitAttempted && periodical && periodicity == "custom" && customDays.toIntOrNull() == null) "Nombre de jours invalide" else null
+    val endDateError = if (submitAttempted && !periodical && endDate == null) "Choisissez une date de fin" else null
+    val displayedAmountError = amountError ?: amountZeroError
 
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp)) {
@@ -584,7 +509,11 @@ fun CreateBudgetDialog(
                         onValueChange = { amount = it },
                         label = { Text("Montant total (${CurrencyFormatter.getSymbol(currency)})") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        isError = displayedAmountError != null,
+                        supportingText = if (displayedAmountError != null) {
+                            { Text(displayedAmountError, color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
+                        } else null
                     )
                 }
                 item {
@@ -602,9 +531,7 @@ fun CreateBudgetDialog(
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("Date de début") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showStartPicker = true },
+                        modifier = Modifier.fillMaxWidth().clickable { showStartPicker = true },
                         enabled = false,
                         colors = OutlinedTextFieldDefaults.colors(
                             disabledTextColor = MaterialTheme.colorScheme.onSurface,
@@ -614,47 +541,26 @@ fun CreateBudgetDialog(
                     )
                 }
                 item {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         Text("Budget périodique", modifier = Modifier.weight(1f))
                         Switch(checked = periodical, onCheckedChange = { periodical = it })
                     }
                 }
                 if (periodical) {
                     item {
-                        ExposedDropdownMenuBox(
-                            expanded = showPeriodicityMenu,
-                            onExpandedChange = { showPeriodicityMenu = it }
-                        ) {
+                        ExposedDropdownMenuBox(expanded = showPeriodicityMenu, onExpandedChange = { showPeriodicityMenu = it }) {
                             OutlinedTextField(
-                                value = when (periodicity) {
-                                    "custom" -> "Personnalisé"
-                                    else -> periodicity.replaceFirstChar { it.uppercase() }
-                                },
+                                value = when (periodicity) { "custom" -> "Personnalisé"; else -> periodicity.replaceFirstChar { it.uppercase() } },
                                 onValueChange = {},
                                 readOnly = true,
                                 label = { Text("Périodicité") },
-                                trailingIcon = {
-                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = showPeriodicityMenu)
-                                },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showPeriodicityMenu) },
                                 modifier = Modifier.menuAnchor().fillMaxWidth()
                             )
-                            ExposedDropdownMenu(
-                                expanded = showPeriodicityMenu,
-                                onDismissRequest = { showPeriodicityMenu = false }
-                            ) {
+                            ExposedDropdownMenu(expanded = showPeriodicityMenu, onDismissRequest = { showPeriodicityMenu = false }) {
                                 periodicities.forEach { p ->
                                     DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                when (p) {
-                                                    "custom" -> "Personnalisé (X jours)"
-                                                    else -> p.replaceFirstChar { it.uppercase() }
-                                                }
-                                            )
-                                        },
+                                        text = { Text(when (p) { "custom" -> "Personnalisé (X jours)"; else -> p.replaceFirstChar { it.uppercase() } }) },
                                         onClick = { periodicity = p; showPeriodicityMenu = false }
                                     )
                                 }
@@ -668,7 +574,11 @@ fun CreateBudgetDialog(
                                 onValueChange = { customDays = it },
                                 label = { Text("Nombre de jours") },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                isError = customDaysError != null,
+                                supportingText = if (customDaysError != null) {
+                                    { Text(customDaysError, color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
+                                } else null
                             )
                         }
                     }
@@ -679,31 +589,31 @@ fun CreateBudgetDialog(
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("Date de fin") },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { showEndPicker = true },
+                            modifier = Modifier.fillMaxWidth().clickable { showEndPicker = true },
                             enabled = false,
+                            isError = endDateError != null,
                             colors = OutlinedTextFieldDefaults.colors(
                                 disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledBorderColor = if (endDateError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
                                 disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         )
+                        if (endDateError != null) {
+                            Text(endDateError, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                        }
                     }
                 }
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
-                            Text("Annuler")
-                        }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Annuler") }
                         Button(
                             onClick = {
+                                submitAttempted = true
                                 val amt = amount.toDoubleOrNull() ?: return@Button
-                                val days = if (periodicity == "custom")
-                                    customDays.toIntOrNull() ?: 0 else 0
+                                if (amt <= 0.0) return@Button
+                                if (periodical && periodicity == "custom" && customDays.toIntOrNull() == null) return@Button
+                                if (!periodical && endDate == null) return@Button
+                                val days = if (periodicity == "custom") customDays.toIntOrNull() ?: 0 else 0
                                 onConfirm(amt, description, startDate, periodical, periodicity, days, endDate)
                             },
                             modifier = Modifier.weight(1f)
@@ -718,14 +628,9 @@ fun CreateBudgetDialog(
         DatePickerDialog(
             onDismissRequest = { showStartPicker = false },
             confirmButton = {
-                TextButton(onClick = {
-                    startPickerState.selectedDateMillis?.let { startDate = Date(it) }
-                    showStartPicker = false
-                }) { Text("OK") }
+                TextButton(onClick = { startPickerState.selectedDateMillis?.let { startDate = Date(it) }; showStartPicker = false }) { Text("OK") }
             },
-            dismissButton = {
-                TextButton(onClick = { showStartPicker = false }) { Text("Annuler") }
-            }
+            dismissButton = { TextButton(onClick = { showStartPicker = false }) { Text("Annuler") } }
         ) { DatePicker(state = startPickerState) }
     }
 
@@ -733,14 +638,9 @@ fun CreateBudgetDialog(
         DatePickerDialog(
             onDismissRequest = { showEndPicker = false },
             confirmButton = {
-                TextButton(onClick = {
-                    endPickerState.selectedDateMillis?.let { endDate = Date(it) }
-                    showEndPicker = false
-                }) { Text("OK") }
+                TextButton(onClick = { endPickerState.selectedDateMillis?.let { endDate = Date(it) }; showEndPicker = false }) { Text("OK") }
             },
-            dismissButton = {
-                TextButton(onClick = { showEndPicker = false }) { Text("Annuler") }
-            }
+            dismissButton = { TextButton(onClick = { showEndPicker = false }) { Text("Annuler") } }
         ) { DatePicker(state = endPickerState) }
     }
 }
@@ -754,22 +654,38 @@ fun AddBudgetCategoryDialog(
     alreadyUsedCategoryIds: Set<String>,
     budgetTotal: Double,
     currentCategoriesTotal: Double,
-    currency : String,
+    currency: String,
     onDismiss: () -> Unit,
     onConfirm: (Category, Double) -> Unit,
-    onCreateNew: () -> Unit
+    onCreateNew: () -> Unit,
+    onDeleteCategory: (Category) -> Unit
 ) {
     var selectedCategory by remember { mutableStateOf<Category?>(null) }
     var amount by remember { mutableStateOf("") }
     var showMenu by remember { mutableStateOf(false) }
+    var categoryToDelete by remember { mutableStateOf<Category?>(null) }
 
-    // Catégories disponibles = pas encore utilisées dans le budget
     val selectableCategories = availableCategories.filter { it.id !in alreadyUsedCategoryIds }
-
     val remaining = budgetTotal - currentCategoriesTotal
     val parsedAmount = amount.toDoubleOrNull()
     val amountExceedsRemaining = parsedAmount != null && parsedAmount > remaining
-    val maxAvailable = remaining
+
+    // Delete confirmation
+    categoryToDelete?.let { cat ->
+        AlertDialog(
+            onDismissRequest = { categoryToDelete = null },
+            icon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Supprimer \"${cat.name}\" ?") },
+            text = { Text("Cette catégorie sera supprimée définitivement.") },
+            confirmButton = {
+                Button(
+                    onClick = { onDeleteCategory(cat); if (selectedCategory?.id == cat.id) selectedCategory = null; categoryToDelete = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Supprimer") }
+            },
+            dismissButton = { OutlinedButton(onClick = { categoryToDelete = null }) { Text("Annuler") } }
+        )
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp)) {
@@ -777,52 +693,45 @@ fun AddBudgetCategoryDialog(
                 modifier = Modifier.padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    "Ajouter une catégorie",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("Ajouter une catégorie", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 
-                //Dropdown catégories filtrées
-                ExposedDropdownMenuBox(
-                    expanded = showMenu,
-                    onExpandedChange = { showMenu = it }
-                ) {
+                ExposedDropdownMenuBox(expanded = showMenu, onExpandedChange = { showMenu = it }) {
                     OutlinedTextField(
                         value = selectedCategory?.name ?: "",
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("Catégorie") },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = showMenu)
-                        },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showMenu) },
                         modifier = Modifier.menuAnchor().fillMaxWidth()
                     )
-                    ExposedDropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false }
-                    ) {
+                    ExposedDropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                         if (selectableCategories.isEmpty()) {
-                            DropdownMenuItem(
-                                text = { Text("Aucune catégorie disponible") },
-                                onClick = {}
-                            )
+                            DropdownMenuItem(text = { Text("Aucune catégorie disponible") }, onClick = {})
                         }
                         selectableCategories.forEach { cat ->
                             DropdownMenuItem(
                                 text = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        val c = runCatching {
-                                            Color(android.graphics.Color.parseColor(cat.color))
-                                        }.getOrElse { Color.Gray }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Box(
-                                            modifier = Modifier
-                                                .size(10.dp)
-                                                .clip(CircleShape)
-                                                .background(c)
+                                            modifier = Modifier.size(10.dp).clip(CircleShape)
+                                                .background(hexToComposeColor(cat.color))
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Text(cat.name)
+                                        Text(cat.name, modifier = Modifier.weight(1f))
+                                        IconButton(
+                                            onClick = { showMenu = false; categoryToDelete = cat },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Outlined.Delete,
+                                                contentDescription = "Supprimer",
+                                                modifier = Modifier.size(14.dp),
+                                                tint = MaterialTheme.colorScheme.error
+                                            )
+                                        }
                                     }
                                 },
                                 onClick = { selectedCategory = cat; showMenu = false }
@@ -836,43 +745,28 @@ fun AddBudgetCategoryDialog(
                     }
                 }
 
-                //Montant
                 OutlinedTextField(
                     value = amount,
                     onValueChange = { input ->
-                        // chiffres et un seul point uniquement
                         val filtered = input.replace(',', '.')
-                        val result = buildString {
+                        amount = buildString {
                             filtered.forEachIndexed { i, c ->
                                 if (c.isDigit()) append(c)
                                 else if (c == '.' && i != 0 && !contains('.')) append(c)
                             }
                         }
-                        amount = result
                     },
                     label = { Text("Montant prévu (${CurrencyFormatter.getSymbol(currency)})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
                     isError = amountExceedsRemaining,
                     supportingText = if (amountExceedsRemaining) {
-                        {
-                            Text(
-                                "Dépasse le budget restant. Max disponible : ${CurrencyFormatter.format(maxAvailable, currency)}",
-                                color = MaterialTheme.colorScheme.error,
-                                fontSize = 11.sp
-                            )
-                        }
+                        { Text("Dépasse le budget restant. Max : ${CurrencyFormatter.format(remaining, currency)}", color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
                     } else null
                 )
 
-                //Boutons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
-                        Text("Annuler")
-                    }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Annuler") }
                     Button(
                         onClick = {
                             val cat = selectedCategory ?: return@Button
@@ -880,9 +774,7 @@ fun AddBudgetCategoryDialog(
                             if (amt <= 0 || amountExceedsRemaining) return@Button
                             onConfirm(cat, amt)
                         },
-                        enabled = selectedCategory != null
-                                && amount.toDoubleOrNull() != null
-                                && !amountExceedsRemaining,
+                        enabled = selectedCategory != null && parsedAmount != null && !amountExceedsRemaining,
                         modifier = Modifier.weight(1f)
                     ) { Text("Ajouter") }
                 }
@@ -898,66 +790,42 @@ fun EditBudgetCategoryDialog(
     budgetCategory: BudgetCategory,
     budgetTotal: Double,
     currentCategoriesTotal: Double,
-    currency : String,
+    currency: String,
     onDismiss: () -> Unit,
     onConfirm: (Double) -> Unit
 ) {
     var amount by remember { mutableStateOf(budgetCategory.plannedAmount.toString()) }
-
     val remaining = budgetTotal - currentCategoriesTotal
     val parsedAmount = amount.toDoubleOrNull()
     val amountExceedsRemaining = parsedAmount != null && parsedAmount > remaining
 
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp)) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    "Modifier ${budgetCategory.categoryName}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Modifier ${budgetCategory.categoryName}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 OutlinedTextField(
                     value = amount,
                     onValueChange = { input ->
                         val filtered = input.replace(',', '.')
-                        val result = buildString {
+                        amount = buildString {
                             filtered.forEachIndexed { i, c ->
                                 if (c.isDigit()) append(c)
                                 else if (c == '.' && i != 0 && !contains('.')) append(c)
                             }
                         }
-                        amount = result
                     },
                     label = { Text("Nouveau montant (${CurrencyFormatter.getSymbol(currency)})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
                     isError = amountExceedsRemaining,
                     supportingText = if (amountExceedsRemaining) {
-                        {
-                            Text(
-                                "Dépasse le budget disponible. Max : ${CurrencyFormatter.format(remaining, currency)}",
-                                color = MaterialTheme.colorScheme.error,
-                                fontSize = 11.sp
-                            )
-                        }
+                        { Text("Dépasse le budget disponible. Max : ${CurrencyFormatter.format(remaining, currency)}", color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
                     } else null
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
-                        Text("Annuler")
-                    }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Annuler") }
                     Button(
-                        onClick = {
-                            val amt = amount.toDoubleOrNull() ?: return@Button
-                            if (amountExceedsRemaining) return@Button
-                            onConfirm(amt)
-                        },
+                        onClick = { val amt = amount.toDoubleOrNull() ?: return@Button; if (amountExceedsRemaining) return@Button; onConfirm(amt) },
                         enabled = parsedAmount != null && parsedAmount > 0 && !amountExceedsRemaining,
                         modifier = Modifier.weight(1f)
                     ) { Text("Sauvegarder") }
@@ -974,94 +842,118 @@ fun CreateCategoryDialog(
     existingCategories: List<Category>,
     onDismiss: () -> Unit,
     onConfirm: (String, String) -> Unit
-
 ) {
-    var name by remember { mutableStateOf("") }
-    var selectedColor by remember { mutableStateOf("#FF5733") }
-    val presetColors = listOf(
-        "#FF5733", "#FF8C00", "#FFD700", "#4CAF50",
-        "#2196F3", "#9C27B0", "#E91E63", "#00BCD4",
-        "#795548", "#607D8B"
-    )
+    val existingColors = existingCategories.map { it.color.trim().lowercase() }
 
-    // ── Validations ──────────────────────────────────────────────────────
+    var name by remember { mutableStateOf("") }
+
+    // Color picker state — hue slider + saturation/brightness sliders
+    var hue by remember { mutableStateOf(0f) }
+    var saturation by remember { mutableStateOf(0.8f) }
+    var brightness by remember { mutableStateOf(0.9f) }
+
+    val pickedColor = Color.hsv(hue, saturation, brightness)
+    val pickedHex = "#%06X".format(pickedColor.toArgb() and 0xFFFFFF)
+
     val nameTaken = name.isNotBlank() &&
             existingCategories.any { it.name.trim().equals(name.trim(), ignoreCase = true) }
-
-    val colorTaken = existingCategories.any {
-        it.color.trim().equals(selectedColor.trim(), ignoreCase = true)
-    }
-
+    val colorTaken = existingColors.any { it == pickedHex.trim().lowercase() }
     val canConfirm = name.isNotBlank() && !nameTaken && !colorTaken
 
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp)) {
             Column(
-                modifier = Modifier.padding(20.dp),
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    "Nouvelle catégorie",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("Nouvelle catégorie", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 
-                // ── Nom ──────────────────────────────────────────────────
+                // Name field
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Nom de la catégorie") },
                     modifier = Modifier.fillMaxWidth(),
+                    isError = nameTaken,
                     supportingText = if (nameTaken) {
                         { Text("Ce nom est déjà utilisé.", color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
                     } else null
                 )
 
-                // ── Couleur ───────────────────────────────────────────────
-                Text("Couleur", style = MaterialTheme.typography.labelMedium)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    presetColors.forEach { hex ->
-                        val c = runCatching {
-                            Color(android.graphics.Color.parseColor(hex))
-                        }.getOrElse { Color.Gray }
-                        val isUsed = existingCategories.any {
-                            it.color.trim().equals(hex.trim(), ignoreCase = true)
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(c.copy(alpha = if (isUsed) 0.3f else 1f))  // grisé si déjà pris
-                                .border(
-                                    width = if (selectedColor == hex) 3.dp else 0.dp,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    shape = CircleShape
-                                )
-                                .clickable { selectedColor = hex }
-                        )
-                    }
-                }
-                if (colorTaken) {
+                // Color preview
+                Text("Couleur choisie", style = MaterialTheme.typography.labelMedium)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(pickedColor)
+                            .border(2.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                    )
                     Text(
-                        "Cette couleur est déjà utilisée par une autre catégorie.",
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 11.sp
+                        pickedHex,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (colorTaken) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
                     )
                 }
+                if (colorTaken) {
+                    Text("Cette couleur est déjà utilisée. Ajustez les curseurs.", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                }
 
-                // ── Boutons ───────────────────────────────────────────────
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
-                        Text("Annuler")
+                // Hue slider
+                Text("Teinte", style = MaterialTheme.typography.labelSmall)
+                Slider(
+                    value = hue,
+                    onValueChange = { hue = it },
+                    valueRange = 0f..360f,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Saturation slider
+                Text("Saturation", style = MaterialTheme.typography.labelSmall)
+                Slider(
+                    value = saturation,
+                    onValueChange = { saturation = it },
+                    valueRange = 0f..1f,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Brightness slider
+                Text("Luminosité", style = MaterialTheme.typography.labelSmall)
+                Slider(
+                    value = brightness,
+                    onValueChange = { brightness = it },
+                    valueRange = 0f..1f,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Existing colors shown as taken
+                if (existingCategories.isNotEmpty()) {
+                    Text("Couleurs déjà utilisées", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        existingCategories.forEach { cat ->
+                            Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(CircleShape)
+                                    .background(hexToComposeColor(cat.color))
+                                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                            )
+                        }
                     }
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Annuler") }
                     Button(
-                        onClick = { if (canConfirm) onConfirm(name, selectedColor) },
+                        onClick = {
+                            if (!canConfirm) return@Button
+                            // If somehow colorTaken, assign random
+                            val finalColor = if (colorTaken) randomHexColor(existingColors) else pickedHex
+                            onConfirm(name, finalColor)
+                        },
                         enabled = canConfirm,
                         modifier = Modifier.weight(1f)
                     ) { Text("Créer") }
