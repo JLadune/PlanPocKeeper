@@ -48,7 +48,7 @@ fun AuthScreen(modifier: Modifier = Modifier) {
                 if (state.name.isBlank() || state.surname.isBlank()) {
                     state = state.copy(
                         isLoading = false,
-                        statusMessage = "Prenom et nom obligatoires pour l'inscription."
+                        statusMessage = "Prénom et nom obligatoires pour l'inscription."
                     )
                     return@launch
                 }
@@ -67,15 +67,42 @@ fun AuthScreen(modifier: Modifier = Modifier) {
                     state.copy(
                         connectedEmail = null,
                         isLoading = false,
-                        statusMessage = "Inscription reussie. Verifie ton email puis connecte-toi."
+                        statusMessage = "Inscription réussie. Vérifie ton email puis connecte-toi."
                     )
                 } else {
                     state.copy(
                         connectedEmail = result.getOrNull()?.email,
                         isLoading = false,
-                        statusMessage = "Connexion reussie."
+                        statusMessage = "Connexion réussie."
                     )
                 }
+            } else {
+                state.copy(
+                    isLoading = false,
+                    statusMessage = result.exceptionOrNull()?.localizedMessage ?: "Erreur inconnue."
+                )
+            }
+        }
+    }
+
+    fun resendVerificationEmail() {
+        val cleanedEmail = state.email.trim()
+        val cleanedPassword = state.password.trim()
+
+        if (cleanedEmail.isBlank() || cleanedPassword.isBlank()) {
+            updateStatus("Saisis email et mot de passe pour renvoyer le mail de vérification.")
+            return
+        }
+
+        scope.launch {
+            state = state.copy(isLoading = true, statusMessage = null)
+            val result = authRepository.resendVerificationEmail(cleanedEmail, cleanedPassword)
+
+            state = if (result.isSuccess) {
+                state.copy(
+                    isLoading = false,
+                    statusMessage = "Email de vérification renvoyé. Vérifie ta boîte mail."
+                )
             } else {
                 state.copy(
                     isLoading = false,
@@ -92,7 +119,7 @@ fun AuthScreen(modifier: Modifier = Modifier) {
                 authRepository.logout()
                 state = state.copy(
                     connectedEmail = null,
-                    statusMessage = "Deconnexion effectuee."
+                    statusMessage = "Déconnexion effectuée."
                 )
             }
         )
@@ -113,7 +140,8 @@ fun AuthScreen(modifier: Modifier = Modifier) {
             onSurnameChange = { value -> state = state.copy(surname = value) },
             onEmailChange = { value -> state = state.copy(email = value) },
             onPasswordChange = { value -> state = state.copy(password = value) },
-            onSubmit = ::submitAuth
+            onSubmit = ::submitAuth,
+            onResendVerificationEmail = ::resendVerificationEmail
         )
         Spacer(modifier = Modifier.height(4.dp))
     }

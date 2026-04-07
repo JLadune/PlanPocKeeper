@@ -24,10 +24,10 @@ fun ConnectedUserCard(
     email: String,
     onLogout: () -> Unit
 ) {
-    Text("Connecte: $email")
+    Text("Connecté: $email")
     Spacer(modifier = Modifier.height(8.dp))
     Button(onClick = onLogout) {
-        Text("Se deconnecter")
+        Text("Se déconnecter")
     }
 }
 
@@ -66,7 +66,7 @@ fun SignUpFields(
         onValueChange = onNameChange,
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        label = { Text("Prenom") }
+        label = { Text("Prénom") }
     )
 
     Spacer(modifier = Modifier.height(8.dp))
@@ -115,7 +115,7 @@ fun AuthAction(
     onSubmit: () -> Unit
 ) {
     Button(enabled = !isLoading, onClick = onSubmit) {
-        Text(if (mode == AuthMode.SIGN_UP) "Creer un compte" else "Se connecter")
+        Text(if (mode == AuthMode.SIGN_UP) "Créer un compte" else "Se connecter")
     }
 
     if (isLoading) {
@@ -140,7 +140,8 @@ fun AuthForm(
     onSurnameChange: (String) -> Unit,
     onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
-    onSubmit: () -> Unit
+    onSubmit: () -> Unit,
+    onResendVerificationEmail: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         AuthModeSelector(selectedMode = state.mode, onModeChange = onModeChange)
@@ -166,6 +167,22 @@ fun AuthForm(
         Spacer(modifier = Modifier.height(12.dp))
 
         AuthAction(mode = state.mode, isLoading = state.isLoading, onSubmit = onSubmit)
+
+        val canResendVerification =
+            state.mode == AuthMode.LOGIN ||
+                (state.mode == AuthMode.SIGN_UP &&
+                    state.statusMessage == "Inscription réussie. Vérifie ton email puis connecte-toi.")
+
+        if (canResendVerification) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                enabled = !state.isLoading,
+                onClick = onResendVerificationEmail
+            ) {
+                Text("Renvoyer l'email de vérification")
+            }
+        }
+
         StatusMessage(state.statusMessage)
     }
 }
