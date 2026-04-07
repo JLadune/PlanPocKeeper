@@ -459,12 +459,23 @@ fun BudgetScreen() {
             budgetCategory = cat,
             budgetTotal = activeBudget?.totalAmount ?: 0.0,
             currentCategoriesTotal = budgetCategories.filter { it.id != cat.id }.sumOf { it.plannedAmount },
+            usedColors = budgetCategories
+                .filter { it.id != cat.id }
+                .map { it.color.trim().lowercase() }
+                .toSet(),
             currency = currency,
             onDismiss = { editingBudgetCategory = null },
-            onConfirm = { newAmount ->
+            onConfirm = { newAmount, newColor ->
                 scope.launch {
                     try {
-                        budgetCategoryCol(activeBudget!!.id).document(cat.id).update("plannedAmount", newAmount).await()
+                        budgetCategoryCol(activeBudget!!.id).document(cat.id)
+                            .update(
+                                mapOf(
+                                    "plannedAmount" to newAmount,
+                                    "color" to newColor
+                                )
+                            )
+                            .await()
                         refreshCategories()
                     } catch (e: Exception) { /* ignore */ }
                 }
@@ -811,18 +822,53 @@ fun EditBudgetCategoryDialog(
     budgetCategory: BudgetCategory,
     budgetTotal: Double,
     currentCategoriesTotal: Double,
+    usedColors: Set<String>,
     currency: String,
     onDismiss: () -> Unit,
-    onConfirm: (Double) -> Unit
+    onConfirm: (Double, String) -> Unit
 ) {
     var amount by remember { mutableStateOf(budgetCategory.plannedAmount.toString()) }
     val remaining = budgetTotal - currentCategoriesTotal
     val parsedAmount = amount.toDoubleOrNull()
     val amountExceedsRemaining = parsedAmount != null && parsedAmount > remaining
 
+    val initialHsv = remember(budgetCategory.color) {
+        FloatArray(3).also { hsv ->
+            runCatching {
+                android.graphics.Color.colorToHSV(android.graphics.Color.parseColor(budgetCategory.color), hsv)
+            }.onFailure {
+                hsv[0] = 0f
+                hsv[1] = 0.8f
+                hsv[2] = 0.9f
+            }
+        }
+    }
+    var hue by remember { mutableStateOf(initialHsv[0]) }
+    var saturation by remember { mutableStateOf(initialHsv[1]) }
+    var brightness by remember { mutableStateOf(initialHsv[2]) }
+
+    val pickedColor = Color.hsv(hue, saturation, brightness)
+    val pickedHex = "#%06X".format(pickedColor.toArgb() and 0xFFFFFF)
+    val colorTaken = usedColors.contains(pickedHex.trim().lowercase())
+
+    fun applyHexSelection(hex: String) {
+        runCatching {
+            val hsv = FloatArray(3)
+            android.graphics.Color.colorToHSV(android.graphics.Color.parseColor(hex), hsv)
+            hue = hsv[0]
+            saturation = hsv[1]
+            brightness = hsv[2]
+        }
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp)) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 Text("Modifier ${budgetCategory.categoryName}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 OutlinedTextField(
                     value = amount,
@@ -843,11 +889,74 @@ fun EditBudgetCategoryDialog(
                         { Text("Dépasse le budget disponible. Max : ${CurrencyFormatter.format(remaining, currency)}", color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
                     } else null
                 )
+
+                Text("Couleur", style = MaterialTheme.typography.labelMedium)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(pickedColor)
+                            .border(2.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                    )
+                    Text(
+                        pickedHex,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (colorTaken) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                if (colorTaken) {
+                    Text(
+                        "Cette couleur est déjà utilisée dans ce budget.",
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 11.sp
+                    )
+                }
+
+                ColorSwatchRows(
+                    colors = QUICK_CATEGORY_COLORS,
+                    selectedHex = pickedHex,
+                    takenColors = usedColors,
+                    onSelect = ::applyHexSelection
+                )
+
+                CATEGORY_PALETTES.forEach { (_, paletteColors) ->
+                    ColorSwatchRows(
+                        colors = paletteColors,
+                        selectedHex = pickedHex,
+                        takenColors = usedColors,
+                        onSelect = ::applyHexSelection,
+                        swatchesPerRow = 6
+                    )
+                }
+
+                Text("Teinte", style = MaterialTheme.typography.labelSmall)
+                Slider(
+                    value = hue,
+                    onValueChange = { hue = it },
+                    valueRange = 0f..360f,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                SaturationBrightnessPicker(
+                    hue = hue,
+                    saturation = saturation,
+                    brightness = brightness,
+                    onColorChange = { sat, bri ->
+                        saturation = sat
+                        brightness = bri
+                    }
+                )
+
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Annuler") }
                     Button(
-                        onClick = { val amt = amount.toDoubleOrNull() ?: return@Button; if (amountExceedsRemaining) return@Button; onConfirm(amt) },
-                        enabled = parsedAmount != null && parsedAmount > 0 && !amountExceedsRemaining,
+                        onClick = {
+                            val amt = amount.toDoubleOrNull() ?: return@Button
+                            if (amountExceedsRemaining || colorTaken) return@Button
+                            onConfirm(amt, pickedHex)
+                        },
+                        enabled = parsedAmount != null && parsedAmount > 0 && !amountExceedsRemaining && !colorTaken,
                         modifier = Modifier.weight(1f)
                     ) { Text("Sauvegarder") }
                 }
