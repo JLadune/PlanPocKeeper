@@ -11,6 +11,7 @@ data class AuthUiState(
     val surname: String = "",
     val email: String = "",
     val password: String = "",
+    val confirmPassword: String = "",
     val statusMessage: String? = null,
     val isLoading: Boolean = false,
     val connectedEmail: String? = null

@@ -35,6 +35,7 @@ fun AuthScreen(modifier: Modifier = Modifier) {
     fun submitAuth() {
         val cleanedEmail = state.email.trim()
         val cleanedPassword = state.password.trim()
+        val cleanedConfirmPassword = state.confirmPassword.trim()
 
         if (cleanedEmail.isBlank() || cleanedPassword.isBlank()) {
             updateStatus("Email et mot de passe obligatoires.")
@@ -52,6 +53,15 @@ fun AuthScreen(modifier: Modifier = Modifier) {
                     )
                     return@launch
                 }
+
+                if (cleanedPassword != cleanedConfirmPassword) {
+                    state = state.copy(
+                        isLoading = false,
+                        statusMessage = "Les mots de passe ne correspondent pas."
+                    )
+                    return@launch
+                }
+
                 authRepository.register(
                     email = cleanedEmail,
                     password = cleanedPassword,
@@ -135,11 +145,18 @@ fun AuthScreen(modifier: Modifier = Modifier) {
         
         AuthForm(
             state = state,
-            onModeChange = { mode -> state = state.copy(mode = mode, statusMessage = null) },
+            onModeChange = { mode ->
+                state = state.copy(
+                    mode = mode,
+                    statusMessage = null,
+                    confirmPassword = ""
+                )
+            },
             onNameChange = { value -> state = state.copy(name = value) },
             onSurnameChange = { value -> state = state.copy(surname = value) },
             onEmailChange = { value -> state = state.copy(email = value) },
             onPasswordChange = { value -> state = state.copy(password = value) },
+            onConfirmPasswordChange = { value -> state = state.copy(confirmPassword = value) },
             onSubmit = ::submitAuth,
             onResendVerificationEmail = ::resendVerificationEmail
         )

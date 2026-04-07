@@ -140,6 +140,7 @@ fun AuthForm(
     onSurnameChange: (String) -> Unit,
     onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
+    onConfirmPasswordChange: (String) -> Unit,
     onSubmit: () -> Unit,
     onResendVerificationEmail: () -> Unit
 ) {
@@ -163,6 +164,18 @@ fun AuthForm(
             onEmailChange = onEmailChange,
             onPasswordChange = onPasswordChange
         )
+
+        if (state.mode == AuthMode.SIGN_UP) {
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = state.confirmPassword,
+                onValueChange = onConfirmPasswordChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Confirmer le mot de passe") },
+                visualTransformation = PasswordVisualTransformation()
+            )
+        }
 
         Spacer(modifier = Modifier.height(12.dp))
 
