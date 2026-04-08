@@ -38,21 +38,6 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
-// ─── Theme ────────────────────────────────────────────────────────────────
-
-@Composable
-fun DepensesTheme(content: @Composable () -> Unit) {
-    val colorScheme = lightColorScheme(
-        primary = Cyan_Pastel_Dark,
-        secondary = Cyan_Pastel_Dark,
-        background = Cyan_Pastel_Dark,
-        surface = Cyan_Pastel_Dark,
-        onPrimary = Color.White,
-        onSurface = Vieux_Rose_Dark
-    )
-    MaterialTheme(colorScheme = colorScheme, content = content)
-}
-
 // ─── Enums & helpers ─────────────────────────────────────────────────────
 
 private enum class DepensesRoute { LIST, ADD, EDIT }
@@ -90,7 +75,6 @@ private fun parseAmount(input: String): Double? = sanitizeAmountInput(input).toD
 
 @Composable
 fun DepensesScreen() {
-    DepensesTheme {
         var route by remember { mutableStateOf(DepensesRoute.LIST) }
         var editingExpense by remember { mutableStateOf<Expense?>(null) }
 
@@ -117,7 +101,7 @@ fun DepensesScreen() {
             }
         }
     }
-}
+
 
 // ─── List screen ─────────────────────────────────────────────────────────
 
@@ -514,7 +498,11 @@ private fun DepensesHomeContent(
                         if (activeBudget == null) showNoBudgetDialog = true
                         else onAddExpense()
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondary,
+                        contentColor = MaterialTheme.colorScheme.onSecondary
+                    )
                 ) {
                     Icon(
                         Icons.Outlined.Add,
@@ -686,7 +674,7 @@ private fun AddDepenseScreen(
     }
 
     Scaffold(
-        containerColor = Color.Transparent,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
