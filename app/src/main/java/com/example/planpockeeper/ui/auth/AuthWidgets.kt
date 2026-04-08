@@ -13,8 +13,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,18 +50,28 @@ fun AuthModeSelector(
     selectedMode: AuthMode,
     onModeChange: (AuthMode) -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Button(
             onClick = { onModeChange(AuthMode.SIGN_UP) },
             enabled = selectedMode != AuthMode.SIGN_UP,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = colorScheme.primary,
+                contentColor = colorScheme.onPrimary
+            )
         ) {
             Text("Inscription")
         }
         Button(
             onClick = { onModeChange(AuthMode.LOGIN) },
             enabled = selectedMode != AuthMode.LOGIN,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = colorScheme.primary,
+                contentColor = colorScheme.onPrimary
+            )
         ) {
             Text("Connexion")
         }
@@ -72,12 +85,23 @@ fun SignUpFields(
     onNameChange: (String) -> Unit,
     onSurnameChange: (String) -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+
     OutlinedTextField(
         value = name,
         onValueChange = onNameChange,
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        label = { Text("Prénom") }
+        label = { Text("Prénom") },
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = colorScheme.primary,
+            unfocusedBorderColor = colorScheme.primary,
+            focusedLabelColor = colorScheme.primary,
+            unfocusedLabelColor = colorScheme.primary,
+            cursorColor = colorScheme.primary,
+            focusedTextColor = colorScheme.primary,
+            unfocusedTextColor = colorScheme.primary
+        )
     )
 
     Spacer(modifier = Modifier.height(8.dp))
@@ -87,7 +111,16 @@ fun SignUpFields(
         onValueChange = onSurnameChange,
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        label = { Text("Nom") }
+        label = { Text("Nom") },
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = colorScheme.primary,
+            unfocusedBorderColor = colorScheme.primary,
+            focusedLabelColor = colorScheme.primary,
+            unfocusedLabelColor = colorScheme.primary,
+            cursorColor = colorScheme.primary,
+            focusedTextColor = colorScheme.primary,
+            unfocusedTextColor = colorScheme.primary
+        )
     )
 }
 
@@ -98,13 +131,24 @@ fun CredentialsFields(
     onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+
     OutlinedTextField(
         value = email,
         onValueChange = onEmailChange,
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
         label = { Text("Email") },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = colorScheme.primary,
+            unfocusedBorderColor = colorScheme.primary,
+            focusedLabelColor = colorScheme.primary,
+            unfocusedLabelColor = colorScheme.primary,
+            cursorColor = colorScheme.primary,
+            focusedTextColor = colorScheme.primary,
+            unfocusedTextColor = colorScheme.primary
+        )
     )
 
     Spacer(modifier = Modifier.height(8.dp))
@@ -115,7 +159,16 @@ fun CredentialsFields(
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
         label = { Text("Mot de passe") },
-        visualTransformation = PasswordVisualTransformation()
+        visualTransformation = PasswordVisualTransformation(),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = colorScheme.primary,
+            unfocusedBorderColor = colorScheme.primary,
+            focusedLabelColor = colorScheme.primary,
+            unfocusedLabelColor = colorScheme.primary,
+            cursorColor = colorScheme.primary,
+            focusedTextColor = colorScheme.primary,
+            unfocusedTextColor = colorScheme.primary
+        )
     )
 }
 
@@ -125,21 +178,31 @@ fun AuthAction(
     isLoading: Boolean,
     onSubmit: () -> Unit
 ) {
-    Button(enabled = !isLoading, onClick = onSubmit) {
+    val colorScheme = MaterialTheme.colorScheme
+
+    Button(
+        enabled = !isLoading,
+        onClick = onSubmit,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = colorScheme.primary,
+            contentColor = colorScheme.onPrimary
+        )
+    ) {
         Text(if (mode == AuthMode.SIGN_UP) "Créer un compte" else "Se connecter")
     }
 
     if (isLoading) {
         Spacer(modifier = Modifier.height(10.dp))
-        CircularProgressIndicator()
+        CircularProgressIndicator(color = colorScheme.primary)
     }
 }
 
 @Composable
 fun StatusMessage(message: String?) {
     if (!message.isNullOrBlank()) {
+        val colorScheme = MaterialTheme.colorScheme
         Spacer(modifier = Modifier.height(12.dp))
-        Text(message)
+        Text(message, color = colorScheme.primary)
     }
 }
 
@@ -223,7 +286,16 @@ fun AuthForm(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 label = { Text("Confirmer le mot de passe") },
-                visualTransformation = PasswordVisualTransformation()
+                visualTransformation = PasswordVisualTransformation(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.primary,
+                    focusedLabelColor = MaterialTheme.colorScheme.primary,
+                    unfocusedLabelColor = MaterialTheme.colorScheme.primary,
+                    cursorColor = MaterialTheme.colorScheme.primary,
+                    focusedTextColor = MaterialTheme.colorScheme.primary,
+                    unfocusedTextColor = MaterialTheme.colorScheme.primary
+                )
             )
         }
 
@@ -247,7 +319,11 @@ fun AuthForm(
             Spacer(modifier = Modifier.height(8.dp))
             Button(
                 enabled = !state.isLoading,
-                onClick = onResendVerificationEmail
+                onClick = onResendVerificationEmail,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary,
+                    contentColor = MaterialTheme.colorScheme.onSecondary
+                )
             ) {
                 Text("Renvoyer l'e-mail de vérification")
             }
