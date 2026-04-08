@@ -1,5 +1,6 @@
 package com.example.planpockeeper.data.repository
 
+import com.example.planpockeeper.data.model.Budget
 import com.example.planpockeeper.data.model.Expense
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.FieldValue
@@ -10,6 +11,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import java.util.Date
 
 class ExpenseRepository {
     private val db = Firebase.firestore
@@ -61,16 +63,24 @@ class ExpenseRepository {
     }
 
     // Modifier une dépense + ajuster spentAmount de la catégorie
-    suspend fun updateExpense(oldExpense: Expense, newExpense: Expense): Result<Unit> {
+    suspend fun updateExpense(newExpense: Expense): Result<Unit> {
         return try {
-            // Étape 1 — Mettre à jour la dépense
+            // Get old expense to compute the difference
+            val oldDoc = expensesRef(newExpense.budgetId)
+                .document(newExpense.id).get().await()
+            val oldExpense = oldDoc.toObject(Expense::class.java)
+            val oldAmount = oldExpense?.amount ?: 0.0
+
+            // Update the expense document
             expensesRef(newExpense.budgetId).document(newExpense.id)
                 .set(newExpense).await()
 
-            // Étape 2 — Ajuster spentAmount (enlever l'ancien montant, ajouter le nouveau)
-            val difference = newExpense.amount - oldExpense.amount
-            budgetCategoryRef(newExpense.budgetId, newExpense.categoryId)
-                .update("spentAmount", FieldValue.increment(difference)).await()
+            // Adjust spentAmount
+            val difference = newExpense.amount - oldAmount
+            if (difference != 0.0) {
+                budgetCategoryRef(newExpense.budgetId, newExpense.categoryId)
+                    .update("spentAmount", FieldValue.increment(difference)).await()
+            }
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -101,5 +111,32 @@ class ExpenseRepository {
                 trySend(expenses)
             }
         awaitClose { listener.remove() }
+    }
+
+    //avoir la dernière dépense
+    suspend fun getLastExpenseDate(budgetId: String): Date? {
+        return try {
+            val snapshot = db.collection("users").document(userId)
+                .collection("budget").document(budgetId)
+                .collection("expenses")
+                .orderBy("date", Query.Direction.DESCENDING)
+                .limit(1)
+                .get().await()
+
+            val lastExpense = snapshot.documents.firstOrNull()
+                ?.toObject(Expense::class.java)
+                ?.date?.toDate()
+
+            // Si aucune dépense, on retourne la date de début du budget
+            lastExpense ?: db.collection("users").document(userId)
+                .collection("budget")
+                .document(budgetId)
+                .get().await()
+                .toObject(Budget::class.java)
+                ?.startDate?.toDate()
+
+        } catch (e: Exception) {
+            null
+        }
     }
 }

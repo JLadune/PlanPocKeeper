@@ -41,7 +41,7 @@ fun BubblesBackground() {
 
     val spawnRate = 0.5f
     val acceleration = Offset(0f, -500f)
-    val friction = 0.2f
+    val friction = 0.4f
 
     var canvasSize by remember { mutableStateOf(Offset.Zero) }
 
@@ -62,7 +62,7 @@ fun BubblesBackground() {
                 val spawnPoint = Offset(width / 2f, height + 50f)
 
                 if (Random.nextFloat() < spawnRate) {
-                    val angle = Random.nextFloat() * (PI/2).toFloat() + (PI/4).toFloat()
+                    val angle = Random.nextFloat() * (PI*0.8).toFloat() + (PI*0.1).toFloat()
                     val speed = Random.nextFloat() * 300f + 800f
 
                     val velocity = Offset(

@@ -1,6 +1,9 @@
 package com.example.planpockeeper.data.repository
 
 import com.example.planpockeeper.data.model.Budget
+import com.example.planpockeeper.data.model.BudgetCategory
+import com.example.planpockeeper.data.model.BudgetSummary
+import com.example.planpockeeper.data.model.Expense
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
@@ -8,6 +11,8 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import com.example.planpockeeper.utils.PeriodUtils
+import com.google.firebase.Timestamp
 
 class BudgetRepository {
     private val db = Firebase.firestore
@@ -90,5 +95,51 @@ class BudgetRepository {
                 trySend(budget)
             }
         awaitClose { listener.remove() }
+    }
+
+    suspend fun rolloverBudget(budget: Budget): Result<BudgetSummary> {
+        return try {
+            val budgetDoc = budgetRef().document(budget.id)
+
+            //Récupérer les dépenses
+            val expensesSnap = budgetDoc.collection("expenses").get().await()
+            val expenses = expensesSnap.documents.mapNotNull { doc ->
+                doc.toObject(Expense::class.java)
+            }
+
+            //Récupérer les catégories
+            val categoriesSnap = budgetDoc.collection("budgetCategories").get().await()
+
+            //Construire le résumé
+            val summary = BudgetSummary(
+                budgetDescription = budget.description,
+                totalPlanned = budget.totalAmount,
+                totalSpent = expenses.sumOf { it.amount },
+                categoryTotals = expenses
+                    .groupBy { it.categoryName }
+                    .mapValues { entry -> entry.value.sumOf { it.amount } },
+                categoryPlanned = categoriesSnap.documents
+                    .mapNotNull { doc -> doc.toObject(BudgetCategory::class.java) }
+                    .associate { it.categoryName to it.plannedAmount },
+                periodStart = budget.startDate.toDate(),
+                periodEnd = PeriodUtils.computeEndDate(budget)
+            )
+
+            //Supprimer toutes les dépenses
+            expensesSnap.documents.forEach { doc -> doc.reference.delete().await() }
+
+            //Remettre spentAmount à 0
+            categoriesSnap.documents.forEach { doc ->
+                doc.reference.update("spentAmount", 0.0).await()
+            }
+
+            //Avancer la startDate
+            val nextStart = PeriodUtils.computeNextStartDate(budget)
+            budgetDoc.update("startDate", Timestamp(nextStart)).await()
+
+            Result.success(summary)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 }

@@ -12,7 +12,12 @@
           "package_name": "com.example.planpockeeper"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "258893519270-duvaa983gj2gicc16hgq9pvf57f63ofs.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCL26VqGZD53bEe4uwLC1zLL7JdfE-J1TI"
@@ -20,7 +25,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "258893519270-duvaa983gj2gicc16hgq9pvf57f63ofs.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

@@ -11,12 +11,18 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.planpockeeper.data.model.Expense
 import java.text.SimpleDateFormat
 import java.util.Locale
+import androidx.compose.ui.platform.LocalContext
+import com.example.planpockeeper.utils.CurrencyFormatter
+import com.example.planpockeeper.utils.PreferencesManager
 
 @Composable
 fun ExpenseHistoryWidget(
@@ -24,6 +30,10 @@ fun ExpenseHistoryWidget(
     isLoading: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val prefsManager = remember { PreferencesManager(context) }
+    val currency by prefsManager.currency.collectAsState(initial = "EUR")
+
     Card(modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -59,7 +69,7 @@ fun ExpenseHistoryWidget(
                     }
                     Column {
                         Text(
-                            String.format(Locale.getDefault(), "%.2f €", expense.amount),
+                            CurrencyFormatter.format(expense.amount, currency),
                             fontWeight = FontWeight.Bold
                         )
                         Text(
