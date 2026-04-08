@@ -38,7 +38,8 @@ fun PlanPocKeeperTheme(
     darkMode: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkMode) DarkColorScheme else LightColorScheme
+    val systemDark = isSystemInDarkTheme()
+    val colorScheme = if (darkMode or systemDark) DarkColorScheme else LightColorScheme
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
