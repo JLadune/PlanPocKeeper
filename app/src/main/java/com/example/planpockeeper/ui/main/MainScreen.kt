@@ -1,15 +1,8 @@
 package com.example.planpockeeper.ui.main
 
-import android.content.Context
-import android.net.ConnectivityManager
-import android.net.Network
-import android.net.NetworkCapabilities
-import android.net.NetworkRequest
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,11 +13,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -40,65 +36,8 @@ import com.example.planpockeeper.ui.depenses.DepensesScreen
 import com.example.planpockeeper.ui.home.HomeScreen
 import com.example.planpockeeper.ui.profile.InfosCompteScreen
 import com.example.planpockeeper.ui.profile.ParametresScreen
-
-private fun ConnectivityManager.isCurrentlyConnected(): Boolean {
-    val network = activeNetwork ?: return false
-    val capabilities = getNetworkCapabilities(network) ?: return false
-    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-}
-
-@Composable
-private fun rememberIsOnline(): Boolean {
-    val context = LocalContext.current
-    val connectivityManager = remember(context) {
-        context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    }
-
-    var isOnline by remember { mutableStateOf(connectivityManager.isCurrentlyConnected()) }
-
-    DisposableEffect(connectivityManager) {
-        val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                isOnline = connectivityManager.isCurrentlyConnected()
-            }
-
-            override fun onLost(network: Network) {
-                isOnline = connectivityManager.isCurrentlyConnected()
-            }
-
-            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
-                isOnline = connectivityManager.isCurrentlyConnected()
-            }
-        }
-
-        val request = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
-
-        connectivityManager.registerNetworkCallback(request, callback)
-        onDispose {
-            runCatching { connectivityManager.unregisterNetworkCallback(callback) }
-        }
-    }
-
-    return isOnline
-}
-
-@Composable
-private fun OfflineBanner() {
-    Surface(
-        color = MaterialTheme.colorScheme.errorContainer,
-        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-        tonalElevation = 2.dp,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Text(
-            text = "Mode hors ligne : certaines actions (Firebase) ne sont pas disponibles.",
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
-        )
-    }
-}
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 data class NavItem(
     val route: String,
@@ -113,18 +52,85 @@ val navItems = listOf(
     NavItem("analyse",  "Analyse",  Icons.Outlined.BarChart)
 )
 
+private data class Bubble(
+    val id: Int,
+    val startX: Dp,
+    val size: Dp
+)
+
+@Composable
+private fun RisingBubble(bubble: Bubble, screenHeight: Dp, onDone: () -> Unit) {
+    val context = LocalContext.current
+
+    // Y: animate from screenHeight (bottom) to -bubble.size (top, offscreen)
+    val yAnim = remember { Animatable(screenHeight.value) }
+    // Rotation: spin continuously
+    val rotation = remember { Animatable(0f) }
+    // Alpha: fade in then fade out near top
+    val alpha = remember { Animatable(0f) }
+
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(bubble.id) {
+        val durationMs = 2800
+
+        scope.launch {
+            // Fade in quickly, then fade out near top
+            alpha.animateTo(1f, animationSpec = tween(300))
+            delay((durationMs * 0.65).toLong())
+            alpha.animateTo(0f, animationSpec = tween((durationMs * 0.35).toLong().toInt()))
+        }
+
+        scope.launch {
+            rotation.animateTo(
+                targetValue = 720f,
+                animationSpec = tween(durationMillis = durationMs, easing = LinearEasing)
+            )
+        }
+
+        yAnim.animateTo(
+            targetValue = -bubble.size.value,
+            animationSpec = tween(durationMillis = durationMs, easing = FastOutSlowInEasing)
+        )
+
+        onDone()
+    }
+
+    Box(
+        modifier = Modifier
+            .offset(x = bubble.startX, y = yAnim.value.dp)
+            .size(bubble.size)
+            .alpha(alpha.value)
+            .rotate(rotation.value)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
+    ) {
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data("file:///android_asset/logo.svg")
+                .decoderFactory(SvgDecoder.Factory())
+                .build(),
+            contentDescription = null,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp)
+        )
+    }
+}
+
+// ─── Main screen ──────────────────────────────────────────────────────────
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
     val navController = rememberNavController()
-    val isOnline = rememberIsOnline()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-
     val currentLabel = navItems.firstOrNull { it.route == currentRoute }?.label ?: "Accueil"
 
     var profileOpen by remember { mutableStateOf(false) }
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
     val panelWidth = screenWidth * 0.80f
 
     val offsetX by animateDpAsState(
@@ -135,6 +141,31 @@ fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
 
     val barColor = MaterialTheme.colorScheme.surfaceVariant
     val contentColor = MaterialTheme.colorScheme.primary
+
+    var tapCount by remember { mutableStateOf(0) }
+    var lastTapTime by remember { mutableStateOf(0L) }
+    val scope = rememberCoroutineScope()
+    var bubbles by remember { mutableStateOf<List<Bubble>>(emptyList()) }
+    var nextBubbleId by remember { mutableStateOf(0) }
+
+    fun onLogoTap() {
+        val now = System.currentTimeMillis()
+        if (now - lastTapTime > 800) tapCount = 0
+        lastTapTime = now
+        tapCount++
+        if (tapCount >= 4) {
+            tapCount = 0
+            scope.launch {
+                repeat(6) { i ->
+                    delay(i * 180L)
+                    val id = nextBubbleId++
+                    val randomX = (20 + (Math.random() * (screenWidth.value - 80))).dp
+                    val randomSize = (48 + (Math.random() * 40)).dp
+                    bubbles = bubbles + Bubble(id = id, startX = randomX, size = randomSize)
+                }
+            }
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -156,8 +187,10 @@ fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
                                 .decoderFactory(SvgDecoder.Factory())
                                 .build(),
                             contentDescription = "Logo",
-                            modifier = Modifier.height(100.dp)
+                            modifier = Modifier
+                                .height(100.dp)
                                 .offset(x = (-16).dp)
+                                .clickable { onLogoTap() }
                         )
                     },
                     actions = {
@@ -212,29 +245,33 @@ fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
                 }
             }
         ) { innerPadding ->
-            Column(modifier = Modifier.padding(innerPadding)) {
-                if (!isOnline) {
-                    OfflineBanner()
+            NavHost(
+                navController = navController,
+                startDestination = "accueil",
+                modifier = Modifier.padding(innerPadding)
+            ) {
+                composable("accueil")      { HomeScreen() }
+                composable("budget")       { BudgetScreen() }
+                composable("depenses")     { DepensesScreen() }
+                composable("analyse")      { AnalyseScreen() }
+                composable("infos_compte") {
+                    InfosCompteScreen(
+                        onBack = { navController.popBackStack() },
+                        onAccountDeleted = { onLogout() },
+                        onEmailChangeRequiresLogout = { onLogout() }
+                    )
                 }
+                composable("parametres")   { ParametresScreen(onBack = { navController.popBackStack() }) }
+            }
+        }
 
-                NavHost(
-                    navController = navController,
-                    startDestination = "accueil",
-                    modifier = Modifier.weight(1f)
-                ) {
-                    composable("accueil")      { HomeScreen() }
-                    composable("budget")       { BudgetScreen() }
-                    composable("depenses")     { DepensesScreen() }
-                    composable("analyse")      { AnalyseScreen() }
-                    composable("infos_compte") {
-                        InfosCompteScreen(
-                            onBack = { navController.popBackStack() },
-                            onAccountDeleted = { onLogout() },
-                            onEmailChangeRequiresLogout = { onLogout() }
-                        )
-                    }
-                    composable("parametres")   { ParametresScreen(onBack = { navController.popBackStack() }) }
-                }
+        bubbles.forEach { bubble ->
+            key(bubble.id) {
+                RisingBubble(
+                    bubble = bubble,
+                    screenHeight = screenHeight,
+                    onDone = { bubbles = bubbles.filter { it.id != bubble.id } }
+                )
             }
         }
 
@@ -308,20 +345,14 @@ fun MainScreen(onLogout: () -> Unit, userEmail: String? = null) {
                 Spacer(modifier = Modifier.height(16.dp))
 
                 TextButton(
-                    onClick = {
-                        profileOpen = false
-                        navController.navigate("infos_compte")
-                    },
+                    onClick = { profileOpen = false; navController.navigate("infos_compte") },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Informations de compte", style = MaterialTheme.typography.bodyLarge, color = contentColor)
                 }
 
                 TextButton(
-                    onClick = {
-                        profileOpen = false
-                        navController.navigate("parametres")
-                    },
+                    onClick = { profileOpen = false; navController.navigate("parametres") },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Paramètres de l'application", style = MaterialTheme.typography.bodyLarge, color = contentColor)

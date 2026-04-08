@@ -9,14 +9,14 @@ import androidx.compose.runtime.Composable
 private val DarkColorScheme = darkColorScheme(
     primary = Vieux_Rose_Dark,
     secondary = Cyan_Pastel_Dark,
-    tertiary = Blanc_Cassé_Dark,
+    tertiary = Vieux_Rose_Dark,
     background = Fond_Dark,
     surface = Fond_Dark,
     surfaceVariant = Blanc_Cassé_Dark,
-    onPrimary = Fond_Dark,
-    onSecondary = Fond_Dark,
-    onBackground = Blanc_Cassé_Dark,
-    onSurface = Blanc_Cassé_Dark,
+    onPrimary = Vieux_Rose_Dark,
+    onSecondary = Vieux_Rose_Dark,
+    onBackground = Vieux_Rose_Dark,
+    onSurface = Vieux_Rose_Dark,
 )
 
 private val LightColorScheme = lightColorScheme(
