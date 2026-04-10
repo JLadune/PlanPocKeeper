@@ -358,6 +358,7 @@ fun BudgetScreen() {
         CreateBudgetDialog(
             existing = activeBudget,
             currency = currency,
+            currentCategoriesTotal = budgetCategories.sumOf { it.plannedAmount },
             onDismiss = { showCreateDialog = false },
             onConfirm = { amount, desc, start, periodical, period, customDays, end ->
                 val resolvedPeriodicity = when {
@@ -492,6 +493,7 @@ fun BudgetScreen() {
 fun CreateBudgetDialog(
     existing: Budget?,
     currency: String,
+    currentCategoriesTotal: Double = 0.0,
     onDismiss: () -> Unit,
     onConfirm: (Double, String, Date, Boolean, String, Int, Date?) -> Unit
 ) {
@@ -520,7 +522,11 @@ fun CreateBudgetDialog(
     val amountZeroError = if (submitAttempted && (amount.toDoubleOrNull() ?: 0.0) <= 0.0) "Le montant doit être supérieur à 0" else null
     val customDaysError = if (submitAttempted && periodical && periodicity == "custom" && customDays.toIntOrNull() == null) "Nombre de jours invalide" else null
     val endDateError = if (submitAttempted && !periodical && endDate == null) "Choisissez une date de fin" else null
+    val amountBelowCategories = if (existing != null && currentCategoriesTotal > 0)
+        (amount.toDoubleOrNull() ?: 0.0) < currentCategoriesTotal
+    else false
     val displayedAmountError = amountError ?: amountZeroError
+    ?: if (amountBelowCategories) "Montant minimum : ${CurrencyFormatter.format(currentCategoriesTotal, currency)} (selon vos catégories)" else null
 
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp)) {
@@ -541,6 +547,7 @@ fun CreateBudgetDialog(
                         onValueChange = { amount = it },
                         label = { Text("Montant total (${CurrencyFormatter.getSymbol(currency)})") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         isError = displayedAmountError != null,
                         supportingText = if (displayedAmountError != null) {
@@ -643,6 +650,7 @@ fun CreateBudgetDialog(
                                 submitAttempted = true
                                 val amt = amount.toDoubleOrNull() ?: return@Button
                                 if (amt <= 0.0) return@Button
+                                if (amountBelowCategories) return@Button
                                 if (periodical && periodicity == "custom" && customDays.toIntOrNull() == null) return@Button
                                 if (!periodical && endDate == null) return@Button
                                 val days = if (periodicity == "custom") customDays.toIntOrNull() ?: 0 else 0
@@ -790,6 +798,7 @@ fun AddBudgetCategoryDialog(
                     },
                     label = { Text("Montant prévu (${CurrencyFormatter.getSymbol(currency)})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     isError = amountExceedsRemaining,
                     supportingText = if (amountExceedsRemaining) {
@@ -883,6 +892,7 @@ fun EditBudgetCategoryDialog(
                     },
                     label = { Text("Nouveau montant (${CurrencyFormatter.getSymbol(currency)})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     isError = amountExceedsRemaining,
                     supportingText = if (amountExceedsRemaining) {

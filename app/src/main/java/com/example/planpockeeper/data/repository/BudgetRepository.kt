@@ -125,9 +125,6 @@ class BudgetRepository {
                 periodEnd = PeriodUtils.computeEndDate(budget)
             )
 
-            //Supprimer toutes les dépenses
-            expensesSnap.documents.forEach { doc -> doc.reference.delete().await() }
-
             //Remettre spentAmount à 0
             categoriesSnap.documents.forEach { doc ->
                 doc.reference.update("spentAmount", 0.0).await()
