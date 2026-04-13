@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -258,6 +259,7 @@ fun AuthForm(
     onPasswordChange: (String) -> Unit,
     onConfirmPasswordChange: (String) -> Unit,
     onSubmit: () -> Unit,
+    onForgotPassword: () -> Unit,
     onResendVerificationEmail: () -> Unit,
     onGoogleSignIn: () -> Unit
 ) {
@@ -307,6 +309,16 @@ fun AuthForm(
         Spacer(modifier = Modifier.height(12.dp))
 
         AuthAction(mode = state.mode, isLoading = state.isLoading, onSubmit = onSubmit)
+
+        if (state.mode == AuthMode.LOGIN) {
+            TextButton(
+                onClick = onForgotPassword,
+                enabled = !state.isLoading,
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text("Mot de passe oublié ?")
+            }
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
         GoogleBrandedButton(
