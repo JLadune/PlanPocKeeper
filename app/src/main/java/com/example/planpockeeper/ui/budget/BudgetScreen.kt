@@ -90,6 +90,8 @@ private fun randomHexColor(excludedHexes: List<String>): String {
 private fun hexToComposeColor(hex: String): Color =
     runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrElse { Color.Gray }
 
+private const val MAX_BUDGET_AMOUNT = 9_999_999.99
+
 private fun pickerUtcMillisToLocalDateMillis(utcMillis: Long): Long {
     val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = utcMillis }
     val localCal = Calendar.getInstance().apply {
@@ -655,18 +657,24 @@ fun CreateBudgetDialog(
 
     val endDateBeforeStart = endDate != null && !endDate!!.after(startDate)
 
+    fun parseAmountInput(value: String): Double? = value.replace(',', '.').toDoubleOrNull()
+
     // ── Validation ──
     var submitAttempted by remember { mutableStateOf(false) }
-    val amountError = if (submitAttempted && amount.toDoubleOrNull() == null) "Montant invalide" else null
-    val amountZeroError = if (submitAttempted && (amount.toDoubleOrNull() ?: 0.0) <= 0.0) "Le montant doit être supérieur à 0" else null
+    val parsedAmount = parseAmountInput(amount)
+    val amountLimitError = if (parsedAmount != null && parsedAmount > MAX_BUDGET_AMOUNT)
+        "Montant maximum : ${CurrencyFormatter.format(MAX_BUDGET_AMOUNT, currency)}"
+    else null
+    val amountError = if (submitAttempted && parsedAmount == null) "Montant invalide" else null
+    val amountZeroError = if (submitAttempted && (parsedAmount ?: 0.0) <= 0.0) "Le montant doit être supérieur à 0" else null
     val customDaysError = if (submitAttempted && periodical && periodicity == "custom" && customDays.toIntOrNull() == null) "Nombre de jours invalide" else null
     val endDateMissingError = if (submitAttempted && !periodical && endDate == null) "Choisissez une date de fin" else null
     val endDateOrderError = if (submitAttempted && !periodical && endDateBeforeStart) "La date de fin doit être après la date de début" else null
     val endDateError = endDateMissingError ?: endDateOrderError
     val amountBelowCategories = if (existing != null && currentCategoriesTotal > 0)
-        (amount.toDoubleOrNull() ?: 0.0) < currentCategoriesTotal
+        (parsedAmount ?: 0.0) < currentCategoriesTotal
     else false
-    val displayedAmountError = amountError ?: amountZeroError
+    val displayedAmountError = amountLimitError ?: amountError ?: amountZeroError
     ?: if (amountBelowCategories) "Montant minimum : ${CurrencyFormatter.format(currentCategoriesTotal, currency)} (selon vos catégories)" else null
 
     Dialog(onDismissRequest = onDismiss) {
@@ -685,7 +693,15 @@ fun CreateBudgetDialog(
                 item {
                     OutlinedTextField(
                         value = amount,
-                        onValueChange = { amount = it },
+                        onValueChange = { input ->
+                            val filtered = input.replace(',', '.')
+                            amount = buildString {
+                                filtered.forEachIndexed { index, c ->
+                                    if (c.isDigit()) append(c)
+                                    else if (c == '.' && index != 0 && !contains('.')) append(c)
+                                }
+                            }
+                        },
                         label = { Text("Montant total (${CurrencyFormatter.getSymbol(currency)})") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
@@ -797,8 +813,9 @@ fun CreateBudgetDialog(
                         Button(
                             onClick = {
                                 submitAttempted = true
-                                val amt = amount.toDoubleOrNull() ?: return@Button
+                                val amt = parsedAmount ?: return@Button
                                 if (amt <= 0.0) return@Button
+                                if (amt > MAX_BUDGET_AMOUNT) return@Button
                                 if (amountBelowCategories) return@Button
                                 if (periodical && periodicity == "custom" && customDays.toIntOrNull() == null) return@Button
                                 if (!periodical && endDate == null) return@Button
