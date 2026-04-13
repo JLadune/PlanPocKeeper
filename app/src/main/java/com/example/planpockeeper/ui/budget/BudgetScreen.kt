@@ -98,6 +98,46 @@ private fun randomHexColor(excludedHexes: List<String>): String {
 private fun hexToComposeColor(hex: String): Color =
     runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrElse { Color.Gray }
 
+// ─── Period helper ───────────────────────────────────────────────────────
+
+private fun currentPeriodStart(budget: Budget): Date {
+    val start = budget.startDate.toDate()
+    val now = Date()
+    if (!budget.periodical) return start
+    if (now.before(start)) return start
+
+    return when {
+        budget.periodicity == "hebdomadaire" -> {
+            val dayMs = 7L * 24 * 60 * 60 * 1000
+            val diffMs = now.time - start.time
+            val periodsElapsed = diffMs / dayMs
+            Date(start.time + periodsElapsed * dayMs)
+        }
+        budget.periodicity == "mensuel" -> {
+            val cal = Calendar.getInstance().apply { time = start }
+            val nowCal = Calendar.getInstance().apply { time = now }
+            while (!cal.after(nowCal)) cal.add(Calendar.MONTH, 1)
+            cal.add(Calendar.MONTH, -1)
+            cal.time
+        }
+        budget.periodicity == "annuel" -> {
+            val cal = Calendar.getInstance().apply { time = start }
+            val nowCal = Calendar.getInstance().apply { time = now }
+            while (!cal.after(nowCal)) cal.add(Calendar.YEAR, 1)
+            cal.add(Calendar.YEAR, -1)
+            cal.time
+        }
+        budget.periodicity.startsWith("custom_") -> {
+            val days = budget.periodicity.removePrefix("custom_").removeSuffix("j").toIntOrNull() ?: 1
+            val dayMs = days.toLong() * 24 * 60 * 60 * 1000
+            val diffMs = now.time - start.time
+            val periodsElapsed = diffMs / dayMs
+            Date(start.time + periodsElapsed * dayMs)
+        }
+        else -> start
+    }
+}
+
 // ─── Screen ───────────────────────────────────────────────────────────────
 
 @Composable
@@ -111,11 +151,13 @@ fun BudgetScreen() {
     var budgetCategories by remember { mutableStateOf<List<BudgetCategory>>(emptyList()) }
     var availableCategories by remember { mutableStateOf<List<Category>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var periodSpentByCategory by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var showAddCategoryDialog by remember { mutableStateOf(false) }
     var showAddCustomCategoryDialog by remember { mutableStateOf(false) }
     var editingBudgetCategory by remember { mutableStateOf<BudgetCategory?>(null) }
+    var preSelectedCategory by remember { mutableStateOf<Category?>(null) }
 
     LaunchedEffect(Unit) {
         try {
@@ -130,6 +172,28 @@ fun BudgetScreen() {
         try {
             val snapshot = budgetCategoryCol(id).whereGreaterThan("plannedAmount", 0.0).get().await()
             budgetCategories = snapshot.documents.mapNotNull { it.toObject(BudgetCategory::class.java) }
+        } catch (e: Exception) { /* ignore */ }
+    }
+
+
+    LaunchedEffect(activeBudget?.id, "periodExpenses") {
+        val budget = activeBudget ?: return@LaunchedEffect
+        try {
+            val periodStart = currentPeriodStart(budget)
+            val snapshot = Firebase.firestore
+                .collection("users").document(userId())
+                .collection("budget").document(budget.id)
+                .collection("expenses")
+                .whereGreaterThanOrEqualTo("date", Timestamp(periodStart))
+                .get().await()
+
+            val map = mutableMapOf<String, Double>()
+            snapshot.documents.forEach { doc ->
+                val categoryId = doc.getString("categoryId") ?: return@forEach
+                val amount = doc.getDouble("amount") ?: 0.0
+                map[categoryId] = (map[categoryId] ?: 0.0) + amount
+            }
+            periodSpentByCategory = map
         } catch (e: Exception) { /* ignore */ }
     }
 
@@ -159,6 +223,29 @@ fun BudgetScreen() {
         }
     }
 
+    fun refreshPeriodExpenses() {
+        val budget = activeBudget ?: return
+        scope.launch {
+            try {
+                val periodStart = currentPeriodStart(budget)
+                val snapshot = Firebase.firestore
+                    .collection("users").document(userId())
+                    .collection("budget").document(budget.id)
+                    .collection("expenses")
+                    .whereGreaterThanOrEqualTo("date", Timestamp(periodStart))
+                    .get().await()
+
+                val map = mutableMapOf<String, Double>()
+                snapshot.documents.forEach { doc ->
+                    val categoryId = doc.getString("categoryId") ?: return@forEach
+                    val amount = doc.getDouble("amount") ?: 0.0
+                    map[categoryId] = (map[categoryId] ?: 0.0) + amount
+                }
+                periodSpentByCategory = map
+            } catch (e: Exception) { /* ignore */ }
+        }
+    }
+
     fun refreshAvailableCategories() {
         scope.launch {
             try {
@@ -175,7 +262,8 @@ fun BudgetScreen() {
         return
     }
 
-    val totalSpent = budgetCategories.sumOf { it.spentAmount }
+
+    val totalSpent = periodSpentByCategory.values.sum()
     val remaining = (activeBudget?.totalAmount ?: 0.0) - totalSpent
 
     LazyColumn(
@@ -204,11 +292,13 @@ fun BudgetScreen() {
                                     onClick = {
                                         scope.launch {
                                             try {
+
                                                 val cats = budgetCategoryCol(activeBudget!!.id).get().await()
                                                 cats.documents.forEach { it.reference.delete().await() }
                                                 budgetCol().document(activeBudget!!.id).delete().await()
                                                 activeBudget = null
                                                 budgetCategories = emptyList()
+                                                periodSpentByCategory = emptyMap()
                                             } catch (e: Exception) { /* ignore */ }
                                         }
                                     },
@@ -239,6 +329,17 @@ fun BudgetScreen() {
                             }
                             else -> "Périodicité : ${budget.periodicity.replaceFirstChar { it.uppercase() }}"
                         }
+
+                        // Show current period start for recurring budgets
+                        if (budget.periodical) {
+                            val periodStart = currentPeriodStart(budget)
+                            Text(
+                                "Période en cours depuis : ${dateFormat.format(periodStart)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
                         if (budget.description.isNotBlank()) {
                             Text(budget.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -307,7 +408,9 @@ fun BudgetScreen() {
 
         // ── Category rows ──
         items(budgetCategories, key = { it.id }) { cat ->
-            val catRemaining = cat.plannedAmount - cat.spentAmount
+
+            val periodSpent = periodSpentByCategory[cat.id] ?: 0.0
+            val catRemaining = cat.plannedAmount - periodSpent
             val catColor = hexToComposeColor(cat.color)
             Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                 Row(
@@ -319,7 +422,7 @@ fun BudgetScreen() {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(cat.categoryName, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "${CurrencyFormatter.format(cat.spentAmount, currency)} / ${CurrencyFormatter.format(cat.plannedAmount, currency)}",
+                            "${CurrencyFormatter.format(periodSpent, currency)} / ${CurrencyFormatter.format(cat.plannedAmount, currency)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -391,6 +494,7 @@ fun BudgetScreen() {
                             budgetCol().document(updated.id).set(updated).await()
                         }
                         refreshBudget()
+                        refreshPeriodExpenses()
                     } catch (e: Exception) { /* ignore */ }
                 }
                 showCreateDialog = false
@@ -405,7 +509,12 @@ fun BudgetScreen() {
             budgetTotal = activeBudget?.totalAmount ?: 0.0,
             currentCategoriesTotal = budgetCategories.sumOf { it.plannedAmount },
             currency = currency,
-            onDismiss = { showAddCategoryDialog = false },
+
+            initialSelection = preSelectedCategory,
+            onDismiss = {
+                preSelectedCategory = null
+                showAddCategoryDialog = false
+            },
             onConfirm = { category, amount ->
                 scope.launch {
                     try {
@@ -418,8 +527,10 @@ fun BudgetScreen() {
                             color = category.color
                         )).await()
                         refreshCategories()
+                        refreshPeriodExpenses()
                     } catch (e: Exception) { /* ignore */ }
                 }
+                preSelectedCategory = null
                 showAddCategoryDialog = false
             },
             onCreateNew = {
@@ -441,16 +552,20 @@ fun BudgetScreen() {
         CreateCategoryDialog(
             existingCategories = availableCategories,
             onDismiss = { showAddCustomCategoryDialog = false },
+
             onConfirm = { name, color ->
                 scope.launch {
                     try {
                         val ref = categoryCol().document()
-                        ref.set(Category(id = ref.id, name = name, color = color)).await()
-                        refreshAvailableCategories()
+                        val newCategory = Category(id = ref.id, name = name, color = color)
+                        ref.set(newCategory).await()
+                        val snapshot = categoryCol().get().await()
+                        availableCategories = snapshot.documents.mapNotNull { it.toObject(Category::class.java) }
+                        preSelectedCategory = newCategory
                     } catch (e: Exception) { /* ignore */ }
+                    showAddCustomCategoryDialog = false
+                    showAddCategoryDialog = true
                 }
-                showAddCustomCategoryDialog = false
-                showAddCategoryDialog = true
             }
         )
     }
@@ -470,12 +585,7 @@ fun BudgetScreen() {
                 scope.launch {
                     try {
                         budgetCategoryCol(activeBudget!!.id).document(cat.id)
-                            .update(
-                                mapOf(
-                                    "plannedAmount" to newAmount,
-                                    "color" to newColor
-                                )
-                            )
+                            .update(mapOf("plannedAmount" to newAmount, "color" to newColor))
                             .await()
                         refreshCategories()
                     } catch (e: Exception) { /* ignore */ }
@@ -516,12 +626,17 @@ fun CreateBudgetDialog(
     val startPickerState = rememberDatePickerState(initialSelectedDateMillis = startDate.time)
     val endPickerState = rememberDatePickerState(initialSelectedDateMillis = endDate?.time ?: System.currentTimeMillis())
 
+
+    val endDateBeforeStart = endDate != null && !endDate!!.after(startDate)
+
     // ── Validation ──
     var submitAttempted by remember { mutableStateOf(false) }
     val amountError = if (submitAttempted && amount.toDoubleOrNull() == null) "Montant invalide" else null
     val amountZeroError = if (submitAttempted && (amount.toDoubleOrNull() ?: 0.0) <= 0.0) "Le montant doit être supérieur à 0" else null
     val customDaysError = if (submitAttempted && periodical && periodicity == "custom" && customDays.toIntOrNull() == null) "Nombre de jours invalide" else null
-    val endDateError = if (submitAttempted && !periodical && endDate == null) "Choisissez une date de fin" else null
+    val endDateMissingError = if (submitAttempted && !periodical && endDate == null) "Choisissez une date de fin" else null
+    val endDateOrderError = if (submitAttempted && !periodical && endDateBeforeStart) "La date de fin doit être après la date de début" else null
+    val endDateError = endDateMissingError ?: endDateOrderError
     val amountBelowCategories = if (existing != null && currentCategoriesTotal > 0)
         (amount.toDoubleOrNull() ?: 0.0) < currentCategoriesTotal
     else false
@@ -623,6 +738,7 @@ fun CreateBudgetDialog(
                     }
                 } else {
                     item {
+
                         OutlinedTextField(
                             value = if (endDate != null) dateFormat.format(endDate!!) else "",
                             onValueChange = {},
@@ -630,15 +746,22 @@ fun CreateBudgetDialog(
                             label = { Text("Date de fin") },
                             modifier = Modifier.fillMaxWidth().clickable { showEndPicker = true },
                             enabled = false,
-                            isError = endDateError != null,
+                            isError = endDateError != null || endDateBeforeStart,
                             colors = OutlinedTextFieldDefaults.colors(
                                 disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                                disabledBorderColor = if (endDateError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+                                disabledBorderColor = if (endDateError != null || endDateBeforeStart)
+                                    MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
                                 disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         )
                         if (endDateError != null) {
                             Text(endDateError, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                        } else if (endDateBeforeStart) {
+                            Text(
+                                "La date de fin doit être après la date de début.",
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 11.sp
+                            )
                         }
                     }
                 }
@@ -653,6 +776,8 @@ fun CreateBudgetDialog(
                                 if (amountBelowCategories) return@Button
                                 if (periodical && periodicity == "custom" && customDays.toIntOrNull() == null) return@Button
                                 if (!periodical && endDate == null) return@Button
+
+                                if (!periodical && endDateBeforeStart) return@Button
                                 val days = if (periodicity == "custom") customDays.toIntOrNull() ?: 0 else 0
                                 onConfirm(amt, description, startDate, periodical, periodicity, days, endDate)
                             },
@@ -668,7 +793,16 @@ fun CreateBudgetDialog(
         DatePickerDialog(
             onDismissRequest = { showStartPicker = false },
             confirmButton = {
-                TextButton(onClick = { startPickerState.selectedDateMillis?.let { startDate = Date(it) }; showStartPicker = false }) { Text("OK") }
+                TextButton(onClick = {
+                    startPickerState.selectedDateMillis?.let {
+                        startDate = Date(it)
+
+                        if (endDate != null && !endDate!!.after(startDate)) {
+                            endDate = null
+                        }
+                    }
+                    showStartPicker = false
+                }) { Text("OK") }
             },
             dismissButton = { TextButton(onClick = { showStartPicker = false }) { Text("Annuler") } }
         ) { DatePicker(state = startPickerState) }
@@ -678,7 +812,17 @@ fun CreateBudgetDialog(
         DatePickerDialog(
             onDismissRequest = { showEndPicker = false },
             confirmButton = {
-                TextButton(onClick = { endPickerState.selectedDateMillis?.let { endDate = Date(it) }; showEndPicker = false }) { Text("OK") }
+                TextButton(onClick = {
+
+                    endPickerState.selectedDateMillis?.let { millis ->
+                        val picked = Date(millis)
+                        if (picked.after(startDate)) {
+                            endDate = picked
+                        }
+                        // silently ignore if before or equal to start date
+                    }
+                    showEndPicker = false
+                }) { Text("OK") }
             },
             dismissButton = { TextButton(onClick = { showEndPicker = false }) { Text("Annuler") } }
         ) { DatePicker(state = endPickerState) }
@@ -695,12 +839,14 @@ fun AddBudgetCategoryDialog(
     budgetTotal: Double,
     currentCategoriesTotal: Double,
     currency: String,
+    initialSelection: Category? = null,
     onDismiss: () -> Unit,
     onConfirm: (Category, Double) -> Unit,
     onCreateNew: () -> Unit,
     onDeleteCategory: (Category) -> Unit
 ) {
-    var selectedCategory by remember { mutableStateOf<Category?>(null) }
+
+    var selectedCategory by remember { mutableStateOf<Category?>(initialSelection) }
     var amount by remember { mutableStateOf("") }
     var showMenu by remember { mutableStateOf(false) }
     var categoryToDelete by remember { mutableStateOf<Category?>(null) }
@@ -719,7 +865,11 @@ fun AddBudgetCategoryDialog(
             text = { Text("Cette catégorie sera supprimée définitivement.") },
             confirmButton = {
                 Button(
-                    onClick = { onDeleteCategory(cat); if (selectedCategory?.id == cat.id) selectedCategory = null; categoryToDelete = null },
+                    onClick = {
+                        onDeleteCategory(cat)
+                        if (selectedCategory?.id == cat.id) selectedCategory = null
+                        categoryToDelete = null
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Supprimer") }
             },
@@ -846,9 +996,7 @@ fun EditBudgetCategoryDialog(
             runCatching {
                 android.graphics.Color.colorToHSV(android.graphics.Color.parseColor(budgetCategory.color), hsv)
             }.onFailure {
-                hsv[0] = 0f
-                hsv[1] = 0.8f
-                hsv[2] = 0.9f
+                hsv[0] = 0f; hsv[1] = 0.8f; hsv[2] = 0.9f
             }
         }
     }
@@ -864,9 +1012,7 @@ fun EditBudgetCategoryDialog(
         runCatching {
             val hsv = FloatArray(3)
             android.graphics.Color.colorToHSV(android.graphics.Color.parseColor(hex), hsv)
-            hue = hsv[0]
-            saturation = hsv[1]
-            brightness = hsv[2]
+            hue = hsv[0]; saturation = hsv[1]; brightness = hsv[2]
         }
     }
 
@@ -903,10 +1049,7 @@ fun EditBudgetCategoryDialog(
                 Text("Couleur", style = MaterialTheme.typography.labelMedium)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(pickedColor)
+                        modifier = Modifier.size(36.dp).clip(CircleShape).background(pickedColor)
                             .border(2.dp, MaterialTheme.colorScheme.outline, CircleShape)
                     )
                     Text(
@@ -916,47 +1059,19 @@ fun EditBudgetCategoryDialog(
                     )
                 }
                 if (colorTaken) {
-                    Text(
-                        "Cette couleur est déjà utilisée dans ce budget.",
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 11.sp
-                    )
+                    Text("Cette couleur est déjà utilisée dans ce budget.", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
                 }
 
-                ColorSwatchRows(
-                    colors = QUICK_CATEGORY_COLORS,
-                    selectedHex = pickedHex,
-                    takenColors = usedColors,
-                    onSelect = ::applyHexSelection
-                )
+                ColorSwatchRows(colors = QUICK_CATEGORY_COLORS, selectedHex = pickedHex, takenColors = usedColors, onSelect = ::applyHexSelection)
 
                 CATEGORY_PALETTES.forEach { (_, paletteColors) ->
-                    ColorSwatchRows(
-                        colors = paletteColors,
-                        selectedHex = pickedHex,
-                        takenColors = usedColors,
-                        onSelect = ::applyHexSelection,
-                        swatchesPerRow = 6
-                    )
+                    ColorSwatchRows(colors = paletteColors, selectedHex = pickedHex, takenColors = usedColors, onSelect = ::applyHexSelection, swatchesPerRow = 6)
                 }
 
                 Text("Teinte", style = MaterialTheme.typography.labelSmall)
-                Slider(
-                    value = hue,
-                    onValueChange = { hue = it },
-                    valueRange = 0f..360f,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Slider(value = hue, onValueChange = { hue = it }, valueRange = 0f..360f, modifier = Modifier.fillMaxWidth())
 
-                SaturationBrightnessPicker(
-                    hue = hue,
-                    saturation = saturation,
-                    brightness = brightness,
-                    onColorChange = { sat, bri ->
-                        saturation = sat
-                        brightness = bri
-                    }
-                )
+                SaturationBrightnessPicker(hue = hue, saturation = saturation, brightness = brightness, onColorChange = { sat, bri -> saturation = sat; brightness = bri })
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Annuler") }
@@ -986,8 +1101,6 @@ fun CreateCategoryDialog(
     val existingColors = existingCategories.map { it.color.trim().lowercase() }.toSet()
 
     var name by remember { mutableStateOf("") }
-
-    // Visual picker state (HSV)
     var hue by remember { mutableStateOf(0f) }
     var saturation by remember { mutableStateOf(0.8f) }
     var brightness by remember { mutableStateOf(0.9f) }
@@ -999,9 +1112,7 @@ fun CreateCategoryDialog(
         runCatching {
             val hsv = FloatArray(3)
             android.graphics.Color.colorToHSV(android.graphics.Color.parseColor(hex), hsv)
-            hue = hsv[0]
-            saturation = hsv[1]
-            brightness = hsv[2]
+            hue = hsv[0]; saturation = hsv[1]; brightness = hsv[2]
         }
     }
 
@@ -1034,10 +1145,7 @@ fun CreateCategoryDialog(
                 Text("Couleur choisie", style = MaterialTheme.typography.labelMedium)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(pickedColor)
+                        modifier = Modifier.size(48.dp).clip(CircleShape).background(pickedColor)
                             .border(2.dp, MaterialTheme.colorScheme.outline, CircleShape)
                     )
                     Text(
@@ -1051,58 +1159,23 @@ fun CreateCategoryDialog(
                 }
 
                 Text("Couleurs rapides", style = MaterialTheme.typography.labelMedium)
-                ColorSwatchRows(
-                    colors = QUICK_CATEGORY_COLORS,
-                    selectedHex = pickedHex,
-                    takenColors = existingColors,
-                    onSelect = ::applyHexSelection
-                )
+                ColorSwatchRows(colors = QUICK_CATEGORY_COLORS, selectedHex = pickedHex, takenColors = existingColors, onSelect = ::applyHexSelection)
 
                 Text("Palettes", style = MaterialTheme.typography.labelMedium)
                 CATEGORY_PALETTES.forEach { (paletteName, paletteColors) ->
-                    Text(
-                        paletteName,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    ColorSwatchRows(
-                        colors = paletteColors,
-                        selectedHex = pickedHex,
-                        takenColors = existingColors,
-                        onSelect = ::applyHexSelection,
-                        swatchesPerRow = 6
-                    )
+                    Text(paletteName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    ColorSwatchRows(colors = paletteColors, selectedHex = pickedHex, takenColors = existingColors, onSelect = ::applyHexSelection, swatchesPerRow = 6)
                 }
 
                 Text("Personnaliser", style = MaterialTheme.typography.labelMedium)
                 Text("Teinte", style = MaterialTheme.typography.labelSmall)
-                Slider(
-                    value = hue,
-                    onValueChange = { hue = it },
-                    valueRange = 0f..360f,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Slider(value = hue, onValueChange = { hue = it }, valueRange = 0f..360f, modifier = Modifier.fillMaxWidth())
 
-                SaturationBrightnessPicker(
-                    hue = hue,
-                    saturation = saturation,
-                    brightness = brightness,
-                    onColorChange = { sat, bri ->
-                        saturation = sat
-                        brightness = bri
-                    }
-                )
+                SaturationBrightnessPicker(hue = hue, saturation = saturation, brightness = brightness, onColorChange = { sat, bri -> saturation = sat; brightness = bri })
 
                 if (existingCategories.isNotEmpty()) {
                     Text("Couleurs déjà utilisées", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    ColorSwatchRows(
-                        colors = existingCategories.map { it.color },
-                        selectedHex = pickedHex,
-                        takenColors = existingColors,
-                        onSelect = {},
-                        swatchesPerRow = 10,
-                        enabled = false
-                    )
+                    ColorSwatchRows(colors = existingCategories.map { it.color }, selectedHex = pickedHex, takenColors = existingColors, onSelect = {}, swatchesPerRow = 10, enabled = false)
                 }
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1137,7 +1210,6 @@ private fun ColorSwatchRows(
                 val normalized = hex.trim().lowercase()
                 val isSelected = normalized == selectedHex.trim().lowercase()
                 val isTaken = takenColors.contains(normalized)
-
                 Box(
                     modifier = Modifier
                         .size(28.dp)
@@ -1152,13 +1224,7 @@ private fun ColorSwatchRows(
                             },
                             shape = CircleShape
                         )
-                        .let {
-                            if (enabled) {
-                                it.clickable { onSelect(hex) }
-                            } else {
-                                it
-                            }
-                        }
+                        .let { if (enabled) it.clickable { onSelect(hex) } else it }
                 )
             }
         }
@@ -1191,44 +1257,16 @@ private fun SaturationBrightnessPicker(
                 pickerWidth = it.width.toFloat().coerceAtLeast(1f)
                 pickerHeight = it.height.toFloat().coerceAtLeast(1f)
             }
-            .pointerInput(hue) {
-                detectTapGestures { offset ->
-                    applyOffset(offset)
-                }
-            }
-            .pointerInput(hue) {
-                detectDragGestures { change, _ ->
-                    applyOffset(change.position)
-                }
-            }
+            .pointerInput(hue) { detectTapGestures { offset -> applyOffset(offset) } }
+            .pointerInput(hue) { detectDragGestures { change, _ -> applyOffset(change.position) } }
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            drawRect(
-                brush = Brush.horizontalGradient(
-                    colors = listOf(Color.White, Color.hsv(hue, 1f, 1f))
-                )
-            )
-            drawRect(
-                brush = Brush.verticalGradient(
-                    colors = listOf(Color.Transparent, Color.Black)
-                )
-            )
-
+            drawRect(brush = Brush.horizontalGradient(colors = listOf(Color.White, Color.hsv(hue, 1f, 1f))))
+            drawRect(brush = Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black)))
             val markerX = saturation * size.width
             val markerY = (1f - brightness) * size.height
-
-            drawCircle(
-                color = Color.White,
-                radius = 10.dp.toPx(),
-                center = Offset(markerX, markerY),
-                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx())
-            )
-            drawCircle(
-                color = Color.Black.copy(alpha = 0.6f),
-                radius = 12.dp.toPx(),
-                center = Offset(markerX, markerY),
-                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
-            )
+            drawCircle(color = Color.White, radius = 10.dp.toPx(), center = Offset(markerX, markerY), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+            drawCircle(color = Color.Black.copy(alpha = 0.6f), radius = 12.dp.toPx(), center = Offset(markerX, markerY), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx()))
         }
     }
 
