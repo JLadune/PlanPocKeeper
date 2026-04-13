@@ -51,16 +51,8 @@ import java.util.*
 import kotlin.math.roundToInt
 
 private val QUICK_CATEGORY_COLORS = listOf(
-    "#EF5350", "#EC407A", "#AB47BC", "#7E57C2", "#5C6BC0", "#42A5F5",
-    "#26C6DA", "#26A69A", "#66BB6A", "#9CCC65", "#D4E157", "#FFCA28",
-    "#FFA726", "#FF7043", "#8D6E63", "#78909C"
-)
-
-private val CATEGORY_PALETTES = listOf(
-    "Pastel" to listOf("#F8BBD0", "#E1BEE7", "#C5CAE9", "#B3E5FC", "#C8E6C9", "#FFF9C4"),
-    "Nature" to listOf("#2E7D32", "#558B2F", "#8BC34A", "#A1887F", "#6D4C41", "#4E342E"),
-    "Océan" to listOf("#01579B", "#0277BD", "#0288D1", "#039BE5", "#00ACC1", "#00838F"),
-    "Énergie" to listOf("#B71C1C", "#E53935", "#FB8C00", "#FDD835", "#7CB342", "#43A047")
+    "#EF5350", "#EC407A", "#7E57C2", "#42A5F5",
+    "#26A69A", "#66BB6A", "#FFCA28", "#FF7043"
 )
 
 // ─── Firestore helpers ────────────────────────────────────────────────────
@@ -1064,10 +1056,6 @@ fun EditBudgetCategoryDialog(
 
                 ColorSwatchRows(colors = QUICK_CATEGORY_COLORS, selectedHex = pickedHex, takenColors = usedColors, onSelect = ::applyHexSelection)
 
-                CATEGORY_PALETTES.forEach { (_, paletteColors) ->
-                    ColorSwatchRows(colors = paletteColors, selectedHex = pickedHex, takenColors = usedColors, onSelect = ::applyHexSelection, swatchesPerRow = 6)
-                }
-
                 Text("Teinte", style = MaterialTheme.typography.labelSmall)
                 Slider(value = hue, onValueChange = { hue = it }, valueRange = 0f..360f, modifier = Modifier.fillMaxWidth())
 
@@ -1160,12 +1148,6 @@ fun CreateCategoryDialog(
 
                 Text("Couleurs rapides", style = MaterialTheme.typography.labelMedium)
                 ColorSwatchRows(colors = QUICK_CATEGORY_COLORS, selectedHex = pickedHex, takenColors = existingColors, onSelect = ::applyHexSelection)
-
-                Text("Palettes", style = MaterialTheme.typography.labelMedium)
-                CATEGORY_PALETTES.forEach { (paletteName, paletteColors) ->
-                    Text(paletteName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    ColorSwatchRows(colors = paletteColors, selectedHex = pickedHex, takenColors = existingColors, onSelect = ::applyHexSelection, swatchesPerRow = 6)
-                }
 
                 Text("Personnaliser", style = MaterialTheme.typography.labelMedium)
                 Text("Teinte", style = MaterialTheme.typography.labelSmall)
