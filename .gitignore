@@ -30,3 +30,7 @@ captures/
 *.db
 *.sqlite
 readmeYukiYamato.md
+# Android release outputs
+app/release/*.apk
+app/release/output-metadata.json
+app/release/baselineProfiles/

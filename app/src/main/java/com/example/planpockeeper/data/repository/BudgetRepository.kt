@@ -52,7 +52,7 @@ class BudgetRepository {
         }
     }
 
-    // Supprimer le budget + toutes ses budgetCategories et dépenses
+    // Supprimer le budget + ses budgetCategories (sans supprimer les dépenses)
     suspend fun deleteBudget(budgetId: String): Result<Unit> {
         return try {
             val budgetDoc = budgetRef().document(budgetId)
@@ -60,10 +60,6 @@ class BudgetRepository {
             // Supprimer toutes les budgetCategories liées
             val categories = budgetDoc.collection("budgetCategories").get().await()
             categories.documents.forEach { it.reference.delete().await() }
-
-            // Supprimer toutes les dépenses liées
-            val expenses = budgetDoc.collection("expenses").get().await()
-            expenses.documents.forEach { it.reference.delete().await() }
 
             // Supprimer le budget lui-même
             budgetDoc.delete().await()
@@ -101,16 +97,16 @@ class BudgetRepository {
         return try {
             val budgetDoc = budgetRef().document(budget.id)
 
-            //Récupérer les dépenses
+            // Récupérer les dépenses
             val expensesSnap = budgetDoc.collection("expenses").get().await()
             val expenses = expensesSnap.documents.mapNotNull { doc ->
                 doc.toObject(Expense::class.java)
             }
 
-            //Récupérer les catégories
+            // Récupérer les catégories
             val categoriesSnap = budgetDoc.collection("budgetCategories").get().await()
 
-            //Construire le résumé
+            // Construire le résumé
             val summary = BudgetSummary(
                 budgetDescription = budget.description,
                 totalPlanned = budget.totalAmount,
@@ -125,15 +121,12 @@ class BudgetRepository {
                 periodEnd = PeriodUtils.computeEndDate(budget)
             )
 
-            //Supprimer toutes les dépenses
-            expensesSnap.documents.forEach { doc -> doc.reference.delete().await() }
-
-            //Remettre spentAmount à 0
+            // Remettre spentAmount à 0
             categoriesSnap.documents.forEach { doc ->
                 doc.reference.update("spentAmount", 0.0).await()
             }
 
-            //Avancer la startDate
+            // Avancer la startDate
             val nextStart = PeriodUtils.computeNextStartDate(budget)
             budgetDoc.update("startDate", Timestamp(nextStart)).await()
 

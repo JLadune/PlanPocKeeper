@@ -30,7 +30,7 @@ class PieLabelOverlayView(
     }
 
     private val valuePaint = Paint().apply {
-        color = android.graphics.Color.DKGRAY
+        color = android.graphics.Color.BLACK
         textSize = 35f
         textAlign = Paint.Align.CENTER
         isAntiAlias = true

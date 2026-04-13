@@ -94,6 +94,19 @@ class AuthRepository {
         }
     }
 
+    suspend fun sendPasswordResetByEmail(email: String): Result<Unit> {
+        return try {
+            val cleanedEmail = email.trim()
+            if (cleanedEmail.isBlank()) {
+                return Result.failure(Exception("Saisis ton e-mail pour réinitialiser le mot de passe."))
+            }
+            auth.sendPasswordResetEmail(cleanedEmail).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun requestEmailChange(newEmail: String, currentPassword: String): Result<Unit> {
         return try {
             val user = auth.currentUser ?: return Result.failure(Exception("Utilisateur non connecté."))

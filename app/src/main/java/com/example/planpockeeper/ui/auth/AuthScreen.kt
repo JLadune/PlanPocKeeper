@@ -249,6 +249,31 @@ fun AuthScreen(modifier: Modifier = Modifier) {
         }
     }
 
+    fun forgotPassword() {
+        val cleanedEmail = state.email.trim()
+        if (cleanedEmail.isBlank()) {
+            updateStatus("Saisis ton e-mail puis appuie sur \"Mot de passe oublié ?\".")
+            return
+        }
+
+        scope.launch {
+            state = state.copy(isLoading = true, statusMessage = null)
+            val result = authRepository.sendPasswordResetByEmail(cleanedEmail)
+
+            state = if (result.isSuccess) {
+                state.copy(
+                    isLoading = false,
+                    statusMessage = "E-mail de réinitialisation envoyé. Vérifie aussi les spams."
+                )
+            } else {
+                state.copy(
+                    isLoading = false,
+                    statusMessage = mapAuthErrorMessage(result.exceptionOrNull()?.localizedMessage)
+                )
+            }
+        }
+    }
+
     if (state.connectedEmail != null) {
         MainScreen(
             userEmail = state.connectedEmail,
@@ -277,6 +302,7 @@ fun AuthScreen(modifier: Modifier = Modifier) {
                 state = state.copy(
                     mode = mode,
                     statusMessage = null,
+                    password = "",
                     confirmPassword = ""
                 )
             },
@@ -286,6 +312,7 @@ fun AuthScreen(modifier: Modifier = Modifier) {
             onPasswordChange = { value -> state = state.copy(password = value) },
             onConfirmPasswordChange = { value -> state = state.copy(confirmPassword = value) },
             onSubmit = ::submitAuth,
+            onForgotPassword = ::forgotPassword,
             onResendVerificationEmail = ::resendVerificationEmail,
             onGoogleSignIn = ::loginWithGoogle
         )

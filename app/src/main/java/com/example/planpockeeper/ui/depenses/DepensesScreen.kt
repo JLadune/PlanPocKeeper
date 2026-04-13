@@ -38,21 +38,6 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
-// ─── Theme ────────────────────────────────────────────────────────────────
-
-@Composable
-fun DepensesTheme(content: @Composable () -> Unit) {
-    val colorScheme = lightColorScheme(
-        primary = Cyan_Pastel_Dark,
-        secondary = Cyan_Pastel_Dark,
-        background = Cyan_Pastel_Dark,
-        surface = Cyan_Pastel_Dark,
-        onPrimary = Color.White,
-        onSurface = Vieux_Rose_Dark
-    )
-    MaterialTheme(colorScheme = colorScheme, content = content)
-}
-
 // ─── Enums & helpers ─────────────────────────────────────────────────────
 
 private enum class DepensesRoute { LIST, ADD, EDIT }
@@ -74,6 +59,34 @@ private enum class PeriodFilter(val label: String) {
 private fun formatDate(millis: Long): String =
     SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(millis))
 
+private fun pickerUtcMillisToLocalDateMillis(utcMillis: Long): Long {
+    val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = utcMillis }
+    val localCal = Calendar.getInstance().apply {
+        set(Calendar.YEAR, utcCal.get(Calendar.YEAR))
+        set(Calendar.MONTH, utcCal.get(Calendar.MONTH))
+        set(Calendar.DAY_OF_MONTH, utcCal.get(Calendar.DAY_OF_MONTH))
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    return localCal.timeInMillis
+}
+
+private fun localDateMillisToPickerUtcMillis(localMillis: Long): Long {
+    val localCal = Calendar.getInstance().apply { timeInMillis = localMillis }
+    val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+        set(Calendar.YEAR, localCal.get(Calendar.YEAR))
+        set(Calendar.MONTH, localCal.get(Calendar.MONTH))
+        set(Calendar.DAY_OF_MONTH, localCal.get(Calendar.DAY_OF_MONTH))
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    return utcCal.timeInMillis
+}
+
 private fun sanitizeAmountInput(input: String): String {
     val normalized = input.replace(',', '.')
     return buildString {
@@ -90,7 +103,6 @@ private fun parseAmount(input: String): Double? = sanitizeAmountInput(input).toD
 
 @Composable
 fun DepensesScreen() {
-    DepensesTheme {
         var route by remember { mutableStateOf(DepensesRoute.LIST) }
         var editingExpense by remember { mutableStateOf<Expense?>(null) }
 
@@ -117,7 +129,7 @@ fun DepensesScreen() {
             }
         }
     }
-}
+
 
 // ─── List screen ─────────────────────────────────────────────────────────
 
@@ -275,10 +287,14 @@ private fun DepensesHomeContent(
 
     // Custom date pickers
     val startPickerState = rememberDatePickerState(
-        initialSelectedDateMillis = customStartMillis ?: System.currentTimeMillis()
+        initialSelectedDateMillis = localDateMillisToPickerUtcMillis(
+            customStartMillis ?: System.currentTimeMillis()
+        )
     )
     val endPickerState = rememberDatePickerState(
-        initialSelectedDateMillis = customEndMillis ?: System.currentTimeMillis()
+        initialSelectedDateMillis = localDateMillisToPickerUtcMillis(
+            customEndMillis ?: System.currentTimeMillis()
+        )
     )
 
     if (showCustomStartPicker) {
@@ -287,6 +303,7 @@ private fun DepensesHomeContent(
             confirmButton = {
                 TextButton(onClick = {
                     customStartMillis = startPickerState.selectedDateMillis
+                        ?.let(::pickerUtcMillisToLocalDateMillis)
                     showCustomStartPicker = false
                 }) { Text("OK") }
             },
@@ -302,6 +319,7 @@ private fun DepensesHomeContent(
             confirmButton = {
                 TextButton(onClick = {
                     customEndMillis = endPickerState.selectedDateMillis
+                        ?.let(::pickerUtcMillisToLocalDateMillis)
                     showCustomEndPicker = false
                 }) { Text("OK") }
             },
@@ -514,7 +532,11 @@ private fun DepensesHomeContent(
                         if (activeBudget == null) showNoBudgetDialog = true
                         else onAddExpense()
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 ) {
                     Icon(
                         Icons.Outlined.Add,
@@ -667,7 +689,7 @@ private fun AddDepenseScreen(
     }
 
     val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = expenseDateMillis
+        initialSelectedDateMillis = localDateMillisToPickerUtcMillis(expenseDateMillis)
     )
 
     if (showDatePicker) {
@@ -675,7 +697,9 @@ private fun AddDepenseScreen(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    expenseDateMillis = datePickerState.selectedDateMillis ?: expenseDateMillis
+                    expenseDateMillis = datePickerState.selectedDateMillis
+                        ?.let(::pickerUtcMillisToLocalDateMillis)
+                        ?: expenseDateMillis
                     showDatePicker = false
                 }) { Text("OK") }
             },
@@ -686,7 +710,7 @@ private fun AddDepenseScreen(
     }
 
     Scaffold(
-        containerColor = Color.Transparent,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {

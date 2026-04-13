@@ -1,6 +1,6 @@
 package com.example.planpockeeper.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
+
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -13,7 +13,7 @@ private val DarkColorScheme = darkColorScheme(
     background = Fond_Dark,
     surface = Fond_Dark,
     surfaceVariant = Blanc_Cassé_Dark,
-    onPrimary = Vieux_Rose_Dark,
+    onPrimary = Blanc_Cassé_Dark,
     onSecondary = Vieux_Rose_Dark,
     onBackground = Vieux_Rose_Dark,
     onSurface = Vieux_Rose_Dark,
@@ -38,8 +38,7 @@ fun PlanPocKeeperTheme(
     darkMode: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val systemDark = isSystemInDarkTheme()
-    val colorScheme = if (darkMode or systemDark) DarkColorScheme else LightColorScheme
+    val colorScheme = if (darkMode) DarkColorScheme else LightColorScheme
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,

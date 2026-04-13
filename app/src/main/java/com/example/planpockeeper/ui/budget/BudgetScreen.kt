@@ -51,16 +51,8 @@ import java.util.*
 import kotlin.math.roundToInt
 
 private val QUICK_CATEGORY_COLORS = listOf(
-    "#EF5350", "#EC407A", "#AB47BC", "#7E57C2", "#5C6BC0", "#42A5F5",
-    "#26C6DA", "#26A69A", "#66BB6A", "#9CCC65", "#D4E157", "#FFCA28",
-    "#FFA726", "#FF7043", "#8D6E63", "#78909C"
-)
-
-private val CATEGORY_PALETTES = listOf(
-    "Pastel" to listOf("#F8BBD0", "#E1BEE7", "#C5CAE9", "#B3E5FC", "#C8E6C9", "#FFF9C4"),
-    "Nature" to listOf("#2E7D32", "#558B2F", "#8BC34A", "#A1887F", "#6D4C41", "#4E342E"),
-    "Océan" to listOf("#01579B", "#0277BD", "#0288D1", "#039BE5", "#00ACC1", "#00838F"),
-    "Énergie" to listOf("#B71C1C", "#E53935", "#FB8C00", "#FDD835", "#7CB342", "#43A047")
+    "#EF5350", "#EC407A", "#7E57C2", "#42A5F5",
+    "#26A69A", "#66BB6A", "#FFCA28", "#FF7043"
 )
 
 // ─── Firestore helpers ────────────────────────────────────────────────────
@@ -98,6 +90,76 @@ private fun randomHexColor(excludedHexes: List<String>): String {
 private fun hexToComposeColor(hex: String): Color =
     runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrElse { Color.Gray }
 
+private const val MAX_BUDGET_AMOUNT = 9_999_999.99
+
+private fun pickerUtcMillisToLocalDateMillis(utcMillis: Long): Long {
+    val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = utcMillis }
+    val localCal = Calendar.getInstance().apply {
+        set(Calendar.YEAR, utcCal.get(Calendar.YEAR))
+        set(Calendar.MONTH, utcCal.get(Calendar.MONTH))
+        set(Calendar.DAY_OF_MONTH, utcCal.get(Calendar.DAY_OF_MONTH))
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    return localCal.timeInMillis
+}
+
+private fun localDateMillisToPickerUtcMillis(localMillis: Long): Long {
+    val localCal = Calendar.getInstance().apply { timeInMillis = localMillis }
+    val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+        set(Calendar.YEAR, localCal.get(Calendar.YEAR))
+        set(Calendar.MONTH, localCal.get(Calendar.MONTH))
+        set(Calendar.DAY_OF_MONTH, localCal.get(Calendar.DAY_OF_MONTH))
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    return utcCal.timeInMillis
+}
+
+// ─── Period helper ───────────────────────────────────────────────────────
+
+private fun currentPeriodStart(budget: Budget): Date {
+    val start = budget.startDate.toDate()
+    val now = Date()
+    if (!budget.periodical) return start
+    if (now.before(start)) return start
+
+    return when {
+        budget.periodicity == "hebdomadaire" -> {
+            val dayMs = 7L * 24 * 60 * 60 * 1000
+            val diffMs = now.time - start.time
+            val periodsElapsed = diffMs / dayMs
+            Date(start.time + periodsElapsed * dayMs)
+        }
+        budget.periodicity == "mensuel" -> {
+            val cal = Calendar.getInstance().apply { time = start }
+            val nowCal = Calendar.getInstance().apply { time = now }
+            while (!cal.after(nowCal)) cal.add(Calendar.MONTH, 1)
+            cal.add(Calendar.MONTH, -1)
+            cal.time
+        }
+        budget.periodicity == "annuel" -> {
+            val cal = Calendar.getInstance().apply { time = start }
+            val nowCal = Calendar.getInstance().apply { time = now }
+            while (!cal.after(nowCal)) cal.add(Calendar.YEAR, 1)
+            cal.add(Calendar.YEAR, -1)
+            cal.time
+        }
+        budget.periodicity.startsWith("custom_") -> {
+            val days = budget.periodicity.removePrefix("custom_").removeSuffix("j").toIntOrNull() ?: 1
+            val dayMs = days.toLong() * 24 * 60 * 60 * 1000
+            val diffMs = now.time - start.time
+            val periodsElapsed = diffMs / dayMs
+            Date(start.time + periodsElapsed * dayMs)
+        }
+        else -> start
+    }
+}
+
 // ─── Screen ───────────────────────────────────────────────────────────────
 
 @Composable
@@ -111,11 +173,13 @@ fun BudgetScreen() {
     var budgetCategories by remember { mutableStateOf<List<BudgetCategory>>(emptyList()) }
     var availableCategories by remember { mutableStateOf<List<Category>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var periodSpentByCategory by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var showAddCategoryDialog by remember { mutableStateOf(false) }
     var showAddCustomCategoryDialog by remember { mutableStateOf(false) }
     var editingBudgetCategory by remember { mutableStateOf<BudgetCategory?>(null) }
+    var preSelectedCategory by remember { mutableStateOf<Category?>(null) }
 
     LaunchedEffect(Unit) {
         try {
@@ -130,6 +194,28 @@ fun BudgetScreen() {
         try {
             val snapshot = budgetCategoryCol(id).whereGreaterThan("plannedAmount", 0.0).get().await()
             budgetCategories = snapshot.documents.mapNotNull { it.toObject(BudgetCategory::class.java) }
+        } catch (e: Exception) { /* ignore */ }
+    }
+
+
+    LaunchedEffect(activeBudget?.id, "periodExpenses") {
+        val budget = activeBudget ?: return@LaunchedEffect
+        try {
+            val periodStart = currentPeriodStart(budget)
+            val snapshot = Firebase.firestore
+                .collection("users").document(userId())
+                .collection("budget").document(budget.id)
+                .collection("expenses")
+                .whereGreaterThanOrEqualTo("date", Timestamp(periodStart))
+                .get().await()
+
+            val map = mutableMapOf<String, Double>()
+            snapshot.documents.forEach { doc ->
+                val categoryId = doc.getString("categoryId") ?: return@forEach
+                val amount = doc.getDouble("amount") ?: 0.0
+                map[categoryId] = (map[categoryId] ?: 0.0) + amount
+            }
+            periodSpentByCategory = map
         } catch (e: Exception) { /* ignore */ }
     }
 
@@ -159,6 +245,29 @@ fun BudgetScreen() {
         }
     }
 
+    fun refreshPeriodExpenses() {
+        val budget = activeBudget ?: return
+        scope.launch {
+            try {
+                val periodStart = currentPeriodStart(budget)
+                val snapshot = Firebase.firestore
+                    .collection("users").document(userId())
+                    .collection("budget").document(budget.id)
+                    .collection("expenses")
+                    .whereGreaterThanOrEqualTo("date", Timestamp(periodStart))
+                    .get().await()
+
+                val map = mutableMapOf<String, Double>()
+                snapshot.documents.forEach { doc ->
+                    val categoryId = doc.getString("categoryId") ?: return@forEach
+                    val amount = doc.getDouble("amount") ?: 0.0
+                    map[categoryId] = (map[categoryId] ?: 0.0) + amount
+                }
+                periodSpentByCategory = map
+            } catch (e: Exception) { /* ignore */ }
+        }
+    }
+
     fun refreshAvailableCategories() {
         scope.launch {
             try {
@@ -175,7 +284,8 @@ fun BudgetScreen() {
         return
     }
 
-    val totalSpent = budgetCategories.sumOf { it.spentAmount }
+
+    val totalSpent = periodSpentByCategory.values.sum()
     val remaining = (activeBudget?.totalAmount ?: 0.0) - totalSpent
 
     LazyColumn(
@@ -204,11 +314,13 @@ fun BudgetScreen() {
                                     onClick = {
                                         scope.launch {
                                             try {
+
                                                 val cats = budgetCategoryCol(activeBudget!!.id).get().await()
                                                 cats.documents.forEach { it.reference.delete().await() }
                                                 budgetCol().document(activeBudget!!.id).delete().await()
                                                 activeBudget = null
                                                 budgetCategories = emptyList()
+                                                periodSpentByCategory = emptyMap()
                                             } catch (e: Exception) { /* ignore */ }
                                         }
                                     },
@@ -239,6 +351,17 @@ fun BudgetScreen() {
                             }
                             else -> "Périodicité : ${budget.periodicity.replaceFirstChar { it.uppercase() }}"
                         }
+
+                        // Show current period start for recurring budgets
+                        if (budget.periodical) {
+                            val periodStart = currentPeriodStart(budget)
+                            Text(
+                                "Période en cours depuis : ${dateFormat.format(periodStart)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
                         if (budget.description.isNotBlank()) {
                             Text(budget.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -307,7 +430,9 @@ fun BudgetScreen() {
 
         // ── Category rows ──
         items(budgetCategories, key = { it.id }) { cat ->
-            val catRemaining = cat.plannedAmount - cat.spentAmount
+
+            val periodSpent = periodSpentByCategory[cat.id] ?: 0.0
+            val catRemaining = cat.plannedAmount - periodSpent
             val catColor = hexToComposeColor(cat.color)
             Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                 Row(
@@ -319,7 +444,7 @@ fun BudgetScreen() {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(cat.categoryName, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "${CurrencyFormatter.format(cat.spentAmount, currency)} / ${CurrencyFormatter.format(cat.plannedAmount, currency)}",
+                            "${CurrencyFormatter.format(periodSpent, currency)} / ${CurrencyFormatter.format(cat.plannedAmount, currency)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -358,6 +483,7 @@ fun BudgetScreen() {
         CreateBudgetDialog(
             existing = activeBudget,
             currency = currency,
+            currentCategoriesTotal = budgetCategories.sumOf { it.plannedAmount },
             onDismiss = { showCreateDialog = false },
             onConfirm = { amount, desc, start, periodical, period, customDays, end ->
                 val resolvedPeriodicity = when {
@@ -390,6 +516,7 @@ fun BudgetScreen() {
                             budgetCol().document(updated.id).set(updated).await()
                         }
                         refreshBudget()
+                        refreshPeriodExpenses()
                     } catch (e: Exception) { /* ignore */ }
                 }
                 showCreateDialog = false
@@ -404,7 +531,12 @@ fun BudgetScreen() {
             budgetTotal = activeBudget?.totalAmount ?: 0.0,
             currentCategoriesTotal = budgetCategories.sumOf { it.plannedAmount },
             currency = currency,
-            onDismiss = { showAddCategoryDialog = false },
+
+            initialSelection = preSelectedCategory,
+            onDismiss = {
+                preSelectedCategory = null
+                showAddCategoryDialog = false
+            },
             onConfirm = { category, amount ->
                 scope.launch {
                     try {
@@ -417,8 +549,10 @@ fun BudgetScreen() {
                             color = category.color
                         )).await()
                         refreshCategories()
+                        refreshPeriodExpenses()
                     } catch (e: Exception) { /* ignore */ }
                 }
+                preSelectedCategory = null
                 showAddCategoryDialog = false
             },
             onCreateNew = {
@@ -440,16 +574,20 @@ fun BudgetScreen() {
         CreateCategoryDialog(
             existingCategories = availableCategories,
             onDismiss = { showAddCustomCategoryDialog = false },
+
             onConfirm = { name, color ->
                 scope.launch {
                     try {
                         val ref = categoryCol().document()
-                        ref.set(Category(id = ref.id, name = name, color = color)).await()
-                        refreshAvailableCategories()
+                        val newCategory = Category(id = ref.id, name = name, color = color)
+                        ref.set(newCategory).await()
+                        val snapshot = categoryCol().get().await()
+                        availableCategories = snapshot.documents.mapNotNull { it.toObject(Category::class.java) }
+                        preSelectedCategory = newCategory
                     } catch (e: Exception) { /* ignore */ }
+                    showAddCustomCategoryDialog = false
+                    showAddCategoryDialog = true
                 }
-                showAddCustomCategoryDialog = false
-                showAddCategoryDialog = true
             }
         )
     }
@@ -469,12 +607,7 @@ fun BudgetScreen() {
                 scope.launch {
                     try {
                         budgetCategoryCol(activeBudget!!.id).document(cat.id)
-                            .update(
-                                mapOf(
-                                    "plannedAmount" to newAmount,
-                                    "color" to newColor
-                                )
-                            )
+                            .update(mapOf("plannedAmount" to newAmount, "color" to newColor))
                             .await()
                         refreshCategories()
                     } catch (e: Exception) { /* ignore */ }
@@ -492,6 +625,7 @@ fun BudgetScreen() {
 fun CreateBudgetDialog(
     existing: Budget?,
     currency: String,
+    currentCategoriesTotal: Double = 0.0,
     onDismiss: () -> Unit,
     onConfirm: (Double, String, Date, Boolean, String, Int, Date?) -> Unit
 ) {
@@ -511,16 +645,37 @@ fun CreateBudgetDialog(
     val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
     var showStartPicker by remember { mutableStateOf(false) }
     var showEndPicker by remember { mutableStateOf(false) }
-    val startPickerState = rememberDatePickerState(initialSelectedDateMillis = startDate.time)
-    val endPickerState = rememberDatePickerState(initialSelectedDateMillis = endDate?.time ?: System.currentTimeMillis())
+    val startPickerState = rememberDatePickerState(
+        initialSelectedDateMillis = localDateMillisToPickerUtcMillis(startDate.time)
+    )
+    val endPickerState = rememberDatePickerState(
+        initialSelectedDateMillis = localDateMillisToPickerUtcMillis(
+            endDate?.time ?: System.currentTimeMillis()
+        )
+    )
+
+
+    val endDateBeforeStart = endDate != null && !endDate!!.after(startDate)
+
+    fun parseAmountInput(value: String): Double? = value.replace(',', '.').toDoubleOrNull()
 
     // ── Validation ──
     var submitAttempted by remember { mutableStateOf(false) }
-    val amountError = if (submitAttempted && amount.toDoubleOrNull() == null) "Montant invalide" else null
-    val amountZeroError = if (submitAttempted && (amount.toDoubleOrNull() ?: 0.0) <= 0.0) "Le montant doit être supérieur à 0" else null
+    val parsedAmount = parseAmountInput(amount)
+    val amountLimitError = if (parsedAmount != null && parsedAmount > MAX_BUDGET_AMOUNT)
+        "Montant maximum : ${CurrencyFormatter.format(MAX_BUDGET_AMOUNT, currency)}"
+    else null
+    val amountError = if (submitAttempted && parsedAmount == null) "Montant invalide" else null
+    val amountZeroError = if (submitAttempted && (parsedAmount ?: 0.0) <= 0.0) "Le montant doit être supérieur à 0" else null
     val customDaysError = if (submitAttempted && periodical && periodicity == "custom" && customDays.toIntOrNull() == null) "Nombre de jours invalide" else null
-    val endDateError = if (submitAttempted && !periodical && endDate == null) "Choisissez une date de fin" else null
-    val displayedAmountError = amountError ?: amountZeroError
+    val endDateMissingError = if (submitAttempted && !periodical && endDate == null) "Choisissez une date de fin" else null
+    val endDateOrderError = if (submitAttempted && !periodical && endDateBeforeStart) "La date de fin doit être après la date de début" else null
+    val endDateError = endDateMissingError ?: endDateOrderError
+    val amountBelowCategories = if (existing != null && currentCategoriesTotal > 0)
+        (parsedAmount ?: 0.0) < currentCategoriesTotal
+    else false
+    val displayedAmountError = amountLimitError ?: amountError ?: amountZeroError
+    ?: if (amountBelowCategories) "Montant minimum : ${CurrencyFormatter.format(currentCategoriesTotal, currency)} (selon vos catégories)" else null
 
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp)) {
@@ -538,9 +693,18 @@ fun CreateBudgetDialog(
                 item {
                     OutlinedTextField(
                         value = amount,
-                        onValueChange = { amount = it },
+                        onValueChange = { input ->
+                            val filtered = input.replace(',', '.')
+                            amount = buildString {
+                                filtered.forEachIndexed { index, c ->
+                                    if (c.isDigit()) append(c)
+                                    else if (c == '.' && index != 0 && !contains('.')) append(c)
+                                }
+                            }
+                        },
                         label = { Text("Montant total (${CurrencyFormatter.getSymbol(currency)})") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         isError = displayedAmountError != null,
                         supportingText = if (displayedAmountError != null) {
@@ -616,6 +780,7 @@ fun CreateBudgetDialog(
                     }
                 } else {
                     item {
+
                         OutlinedTextField(
                             value = if (endDate != null) dateFormat.format(endDate!!) else "",
                             onValueChange = {},
@@ -623,15 +788,22 @@ fun CreateBudgetDialog(
                             label = { Text("Date de fin") },
                             modifier = Modifier.fillMaxWidth().clickable { showEndPicker = true },
                             enabled = false,
-                            isError = endDateError != null,
+                            isError = endDateError != null || endDateBeforeStart,
                             colors = OutlinedTextFieldDefaults.colors(
                                 disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                                disabledBorderColor = if (endDateError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+                                disabledBorderColor = if (endDateError != null || endDateBeforeStart)
+                                    MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
                                 disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         )
                         if (endDateError != null) {
                             Text(endDateError, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                        } else if (endDateBeforeStart) {
+                            Text(
+                                "La date de fin doit être après la date de début.",
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 11.sp
+                            )
                         }
                     }
                 }
@@ -641,10 +813,14 @@ fun CreateBudgetDialog(
                         Button(
                             onClick = {
                                 submitAttempted = true
-                                val amt = amount.toDoubleOrNull() ?: return@Button
+                                val amt = parsedAmount ?: return@Button
                                 if (amt <= 0.0) return@Button
+                                if (amt > MAX_BUDGET_AMOUNT) return@Button
+                                if (amountBelowCategories) return@Button
                                 if (periodical && periodicity == "custom" && customDays.toIntOrNull() == null) return@Button
                                 if (!periodical && endDate == null) return@Button
+
+                                if (!periodical && endDateBeforeStart) return@Button
                                 val days = if (periodicity == "custom") customDays.toIntOrNull() ?: 0 else 0
                                 onConfirm(amt, description, startDate, periodical, periodicity, days, endDate)
                             },
@@ -660,7 +836,16 @@ fun CreateBudgetDialog(
         DatePickerDialog(
             onDismissRequest = { showStartPicker = false },
             confirmButton = {
-                TextButton(onClick = { startPickerState.selectedDateMillis?.let { startDate = Date(it) }; showStartPicker = false }) { Text("OK") }
+                TextButton(onClick = {
+                    startPickerState.selectedDateMillis?.let {
+                        startDate = Date(pickerUtcMillisToLocalDateMillis(it))
+
+                        if (endDate != null && !endDate!!.after(startDate)) {
+                            endDate = null
+                        }
+                    }
+                    showStartPicker = false
+                }) { Text("OK") }
             },
             dismissButton = { TextButton(onClick = { showStartPicker = false }) { Text("Annuler") } }
         ) { DatePicker(state = startPickerState) }
@@ -670,7 +855,17 @@ fun CreateBudgetDialog(
         DatePickerDialog(
             onDismissRequest = { showEndPicker = false },
             confirmButton = {
-                TextButton(onClick = { endPickerState.selectedDateMillis?.let { endDate = Date(it) }; showEndPicker = false }) { Text("OK") }
+                TextButton(onClick = {
+
+                    endPickerState.selectedDateMillis?.let { millis ->
+                        val picked = Date(pickerUtcMillisToLocalDateMillis(millis))
+                        if (picked.after(startDate)) {
+                            endDate = picked
+                        }
+                        // silently ignore if before or equal to start date
+                    }
+                    showEndPicker = false
+                }) { Text("OK") }
             },
             dismissButton = { TextButton(onClick = { showEndPicker = false }) { Text("Annuler") } }
         ) { DatePicker(state = endPickerState) }
@@ -687,12 +882,14 @@ fun AddBudgetCategoryDialog(
     budgetTotal: Double,
     currentCategoriesTotal: Double,
     currency: String,
+    initialSelection: Category? = null,
     onDismiss: () -> Unit,
     onConfirm: (Category, Double) -> Unit,
     onCreateNew: () -> Unit,
     onDeleteCategory: (Category) -> Unit
 ) {
-    var selectedCategory by remember { mutableStateOf<Category?>(null) }
+
+    var selectedCategory by remember { mutableStateOf<Category?>(initialSelection) }
     var amount by remember { mutableStateOf("") }
     var showMenu by remember { mutableStateOf(false) }
     var categoryToDelete by remember { mutableStateOf<Category?>(null) }
@@ -711,7 +908,11 @@ fun AddBudgetCategoryDialog(
             text = { Text("Cette catégorie sera supprimée définitivement.") },
             confirmButton = {
                 Button(
-                    onClick = { onDeleteCategory(cat); if (selectedCategory?.id == cat.id) selectedCategory = null; categoryToDelete = null },
+                    onClick = {
+                        onDeleteCategory(cat)
+                        if (selectedCategory?.id == cat.id) selectedCategory = null
+                        categoryToDelete = null
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Supprimer") }
             },
@@ -790,6 +991,7 @@ fun AddBudgetCategoryDialog(
                     },
                     label = { Text("Montant prévu (${CurrencyFormatter.getSymbol(currency)})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     isError = amountExceedsRemaining,
                     supportingText = if (amountExceedsRemaining) {
@@ -837,9 +1039,7 @@ fun EditBudgetCategoryDialog(
             runCatching {
                 android.graphics.Color.colorToHSV(android.graphics.Color.parseColor(budgetCategory.color), hsv)
             }.onFailure {
-                hsv[0] = 0f
-                hsv[1] = 0.8f
-                hsv[2] = 0.9f
+                hsv[0] = 0f; hsv[1] = 0.8f; hsv[2] = 0.9f
             }
         }
     }
@@ -855,9 +1055,7 @@ fun EditBudgetCategoryDialog(
         runCatching {
             val hsv = FloatArray(3)
             android.graphics.Color.colorToHSV(android.graphics.Color.parseColor(hex), hsv)
-            hue = hsv[0]
-            saturation = hsv[1]
-            brightness = hsv[2]
+            hue = hsv[0]; saturation = hsv[1]; brightness = hsv[2]
         }
     }
 
@@ -883,6 +1081,7 @@ fun EditBudgetCategoryDialog(
                     },
                     label = { Text("Nouveau montant (${CurrencyFormatter.getSymbol(currency)})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     isError = amountExceedsRemaining,
                     supportingText = if (amountExceedsRemaining) {
@@ -893,10 +1092,7 @@ fun EditBudgetCategoryDialog(
                 Text("Couleur", style = MaterialTheme.typography.labelMedium)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(pickedColor)
+                        modifier = Modifier.size(36.dp).clip(CircleShape).background(pickedColor)
                             .border(2.dp, MaterialTheme.colorScheme.outline, CircleShape)
                     )
                     Text(
@@ -906,47 +1102,15 @@ fun EditBudgetCategoryDialog(
                     )
                 }
                 if (colorTaken) {
-                    Text(
-                        "Cette couleur est déjà utilisée dans ce budget.",
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 11.sp
-                    )
+                    Text("Cette couleur est déjà utilisée dans ce budget.", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
                 }
 
-                ColorSwatchRows(
-                    colors = QUICK_CATEGORY_COLORS,
-                    selectedHex = pickedHex,
-                    takenColors = usedColors,
-                    onSelect = ::applyHexSelection
-                )
-
-                CATEGORY_PALETTES.forEach { (_, paletteColors) ->
-                    ColorSwatchRows(
-                        colors = paletteColors,
-                        selectedHex = pickedHex,
-                        takenColors = usedColors,
-                        onSelect = ::applyHexSelection,
-                        swatchesPerRow = 6
-                    )
-                }
+                ColorSwatchRows(colors = QUICK_CATEGORY_COLORS, selectedHex = pickedHex, takenColors = usedColors, onSelect = ::applyHexSelection)
 
                 Text("Teinte", style = MaterialTheme.typography.labelSmall)
-                Slider(
-                    value = hue,
-                    onValueChange = { hue = it },
-                    valueRange = 0f..360f,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Slider(value = hue, onValueChange = { hue = it }, valueRange = 0f..360f, modifier = Modifier.fillMaxWidth())
 
-                SaturationBrightnessPicker(
-                    hue = hue,
-                    saturation = saturation,
-                    brightness = brightness,
-                    onColorChange = { sat, bri ->
-                        saturation = sat
-                        brightness = bri
-                    }
-                )
+                SaturationBrightnessPicker(hue = hue, saturation = saturation, brightness = brightness, onColorChange = { sat, bri -> saturation = sat; brightness = bri })
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Annuler") }
@@ -976,8 +1140,6 @@ fun CreateCategoryDialog(
     val existingColors = existingCategories.map { it.color.trim().lowercase() }.toSet()
 
     var name by remember { mutableStateOf("") }
-
-    // Visual picker state (HSV)
     var hue by remember { mutableStateOf(0f) }
     var saturation by remember { mutableStateOf(0.8f) }
     var brightness by remember { mutableStateOf(0.9f) }
@@ -989,9 +1151,7 @@ fun CreateCategoryDialog(
         runCatching {
             val hsv = FloatArray(3)
             android.graphics.Color.colorToHSV(android.graphics.Color.parseColor(hex), hsv)
-            hue = hsv[0]
-            saturation = hsv[1]
-            brightness = hsv[2]
+            hue = hsv[0]; saturation = hsv[1]; brightness = hsv[2]
         }
     }
 
@@ -1024,10 +1184,7 @@ fun CreateCategoryDialog(
                 Text("Couleur choisie", style = MaterialTheme.typography.labelMedium)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(pickedColor)
+                        modifier = Modifier.size(48.dp).clip(CircleShape).background(pickedColor)
                             .border(2.dp, MaterialTheme.colorScheme.outline, CircleShape)
                     )
                     Text(
@@ -1041,58 +1198,17 @@ fun CreateCategoryDialog(
                 }
 
                 Text("Couleurs rapides", style = MaterialTheme.typography.labelMedium)
-                ColorSwatchRows(
-                    colors = QUICK_CATEGORY_COLORS,
-                    selectedHex = pickedHex,
-                    takenColors = existingColors,
-                    onSelect = ::applyHexSelection
-                )
-
-                Text("Palettes", style = MaterialTheme.typography.labelMedium)
-                CATEGORY_PALETTES.forEach { (paletteName, paletteColors) ->
-                    Text(
-                        paletteName,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    ColorSwatchRows(
-                        colors = paletteColors,
-                        selectedHex = pickedHex,
-                        takenColors = existingColors,
-                        onSelect = ::applyHexSelection,
-                        swatchesPerRow = 6
-                    )
-                }
+                ColorSwatchRows(colors = QUICK_CATEGORY_COLORS, selectedHex = pickedHex, takenColors = existingColors, onSelect = ::applyHexSelection)
 
                 Text("Personnaliser", style = MaterialTheme.typography.labelMedium)
                 Text("Teinte", style = MaterialTheme.typography.labelSmall)
-                Slider(
-                    value = hue,
-                    onValueChange = { hue = it },
-                    valueRange = 0f..360f,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Slider(value = hue, onValueChange = { hue = it }, valueRange = 0f..360f, modifier = Modifier.fillMaxWidth())
 
-                SaturationBrightnessPicker(
-                    hue = hue,
-                    saturation = saturation,
-                    brightness = brightness,
-                    onColorChange = { sat, bri ->
-                        saturation = sat
-                        brightness = bri
-                    }
-                )
+                SaturationBrightnessPicker(hue = hue, saturation = saturation, brightness = brightness, onColorChange = { sat, bri -> saturation = sat; brightness = bri })
 
                 if (existingCategories.isNotEmpty()) {
                     Text("Couleurs déjà utilisées", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    ColorSwatchRows(
-                        colors = existingCategories.map { it.color },
-                        selectedHex = pickedHex,
-                        takenColors = existingColors,
-                        onSelect = {},
-                        swatchesPerRow = 10,
-                        enabled = false
-                    )
+                    ColorSwatchRows(colors = existingCategories.map { it.color }, selectedHex = pickedHex, takenColors = existingColors, onSelect = {}, swatchesPerRow = 10, enabled = false)
                 }
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1127,7 +1243,6 @@ private fun ColorSwatchRows(
                 val normalized = hex.trim().lowercase()
                 val isSelected = normalized == selectedHex.trim().lowercase()
                 val isTaken = takenColors.contains(normalized)
-
                 Box(
                     modifier = Modifier
                         .size(28.dp)
@@ -1142,13 +1257,7 @@ private fun ColorSwatchRows(
                             },
                             shape = CircleShape
                         )
-                        .let {
-                            if (enabled) {
-                                it.clickable { onSelect(hex) }
-                            } else {
-                                it
-                            }
-                        }
+                        .let { if (enabled) it.clickable { onSelect(hex) } else it }
                 )
             }
         }
@@ -1181,44 +1290,16 @@ private fun SaturationBrightnessPicker(
                 pickerWidth = it.width.toFloat().coerceAtLeast(1f)
                 pickerHeight = it.height.toFloat().coerceAtLeast(1f)
             }
-            .pointerInput(hue) {
-                detectTapGestures { offset ->
-                    applyOffset(offset)
-                }
-            }
-            .pointerInput(hue) {
-                detectDragGestures { change, _ ->
-                    applyOffset(change.position)
-                }
-            }
+            .pointerInput(hue) { detectTapGestures { offset -> applyOffset(offset) } }
+            .pointerInput(hue) { detectDragGestures { change, _ -> applyOffset(change.position) } }
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            drawRect(
-                brush = Brush.horizontalGradient(
-                    colors = listOf(Color.White, Color.hsv(hue, 1f, 1f))
-                )
-            )
-            drawRect(
-                brush = Brush.verticalGradient(
-                    colors = listOf(Color.Transparent, Color.Black)
-                )
-            )
-
+            drawRect(brush = Brush.horizontalGradient(colors = listOf(Color.White, Color.hsv(hue, 1f, 1f))))
+            drawRect(brush = Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black)))
             val markerX = saturation * size.width
             val markerY = (1f - brightness) * size.height
-
-            drawCircle(
-                color = Color.White,
-                radius = 10.dp.toPx(),
-                center = Offset(markerX, markerY),
-                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx())
-            )
-            drawCircle(
-                color = Color.Black.copy(alpha = 0.6f),
-                radius = 12.dp.toPx(),
-                center = Offset(markerX, markerY),
-                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
-            )
+            drawCircle(color = Color.White, radius = 10.dp.toPx(), center = Offset(markerX, markerY), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+            drawCircle(color = Color.Black.copy(alpha = 0.6f), radius = 12.dp.toPx(), center = Offset(markerX, markerY), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx()))
         }
     }
 
