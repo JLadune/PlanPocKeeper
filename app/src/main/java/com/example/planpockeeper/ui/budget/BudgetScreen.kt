@@ -90,6 +90,34 @@ private fun randomHexColor(excludedHexes: List<String>): String {
 private fun hexToComposeColor(hex: String): Color =
     runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrElse { Color.Gray }
 
+private fun pickerUtcMillisToLocalDateMillis(utcMillis: Long): Long {
+    val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = utcMillis }
+    val localCal = Calendar.getInstance().apply {
+        set(Calendar.YEAR, utcCal.get(Calendar.YEAR))
+        set(Calendar.MONTH, utcCal.get(Calendar.MONTH))
+        set(Calendar.DAY_OF_MONTH, utcCal.get(Calendar.DAY_OF_MONTH))
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    return localCal.timeInMillis
+}
+
+private fun localDateMillisToPickerUtcMillis(localMillis: Long): Long {
+    val localCal = Calendar.getInstance().apply { timeInMillis = localMillis }
+    val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+        set(Calendar.YEAR, localCal.get(Calendar.YEAR))
+        set(Calendar.MONTH, localCal.get(Calendar.MONTH))
+        set(Calendar.DAY_OF_MONTH, localCal.get(Calendar.DAY_OF_MONTH))
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    return utcCal.timeInMillis
+}
+
 // ─── Period helper ───────────────────────────────────────────────────────
 
 private fun currentPeriodStart(budget: Budget): Date {
@@ -615,8 +643,14 @@ fun CreateBudgetDialog(
     val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
     var showStartPicker by remember { mutableStateOf(false) }
     var showEndPicker by remember { mutableStateOf(false) }
-    val startPickerState = rememberDatePickerState(initialSelectedDateMillis = startDate.time)
-    val endPickerState = rememberDatePickerState(initialSelectedDateMillis = endDate?.time ?: System.currentTimeMillis())
+    val startPickerState = rememberDatePickerState(
+        initialSelectedDateMillis = localDateMillisToPickerUtcMillis(startDate.time)
+    )
+    val endPickerState = rememberDatePickerState(
+        initialSelectedDateMillis = localDateMillisToPickerUtcMillis(
+            endDate?.time ?: System.currentTimeMillis()
+        )
+    )
 
 
     val endDateBeforeStart = endDate != null && !endDate!!.after(startDate)
@@ -787,7 +821,7 @@ fun CreateBudgetDialog(
             confirmButton = {
                 TextButton(onClick = {
                     startPickerState.selectedDateMillis?.let {
-                        startDate = Date(it)
+                        startDate = Date(pickerUtcMillisToLocalDateMillis(it))
 
                         if (endDate != null && !endDate!!.after(startDate)) {
                             endDate = null
@@ -807,7 +841,7 @@ fun CreateBudgetDialog(
                 TextButton(onClick = {
 
                     endPickerState.selectedDateMillis?.let { millis ->
-                        val picked = Date(millis)
+                        val picked = Date(pickerUtcMillisToLocalDateMillis(millis))
                         if (picked.after(startDate)) {
                             endDate = picked
                         }

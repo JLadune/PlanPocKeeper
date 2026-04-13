@@ -277,6 +277,7 @@ fun AuthScreen(modifier: Modifier = Modifier) {
                 state = state.copy(
                     mode = mode,
                     statusMessage = null,
+                    password = "",
                     confirmPassword = ""
                 )
             },

@@ -51,26 +51,29 @@ fun AuthModeSelector(
     onModeChange: (AuthMode) -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
+    val activeColor = colorScheme.primary
+    val inactiveColor = colorScheme.primary.copy(alpha = 0.25f)
+
+    val signUpSelected = selectedMode == AuthMode.SIGN_UP
+    val loginSelected = selectedMode == AuthMode.LOGIN
 
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Button(
             onClick = { onModeChange(AuthMode.SIGN_UP) },
-            enabled = selectedMode != AuthMode.SIGN_UP,
             modifier = Modifier.weight(1f),
             colors = ButtonDefaults.buttonColors(
-                containerColor = colorScheme.primary,
-                contentColor = colorScheme.onPrimary
+                containerColor = if (signUpSelected) activeColor else inactiveColor,
+                contentColor = if (signUpSelected) colorScheme.onPrimary else colorScheme.primary
             )
         ) {
             Text("Inscription")
         }
         Button(
             onClick = { onModeChange(AuthMode.LOGIN) },
-            enabled = selectedMode != AuthMode.LOGIN,
             modifier = Modifier.weight(1f),
             colors = ButtonDefaults.buttonColors(
-                containerColor = colorScheme.primary,
-                contentColor = colorScheme.onPrimary
+                containerColor = if (loginSelected) activeColor else inactiveColor,
+                contentColor = if (loginSelected) colorScheme.onPrimary else colorScheme.primary
             )
         ) {
             Text("Connexion")
@@ -159,6 +162,7 @@ fun CredentialsFields(
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
         label = { Text("Mot de passe") },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         visualTransformation = PasswordVisualTransformation(),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = colorScheme.primary,
@@ -286,6 +290,7 @@ fun AuthForm(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 label = { Text("Confirmer le mot de passe") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 visualTransformation = PasswordVisualTransformation(),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
