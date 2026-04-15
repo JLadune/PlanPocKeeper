@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "258893519270-sifkijq6c19ccq41esagltjcdduup8l5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.planpockeeper",
+            "certificate_hash": "f79a18c8d487c8feb55b2f26f51c5c521a4088a9"
+          }
+        },
+        {
           "client_id": "258893519270-duvaa983gj2gicc16hgq9pvf57f63ofs.apps.googleusercontent.com",
           "client_type": 3
         }
